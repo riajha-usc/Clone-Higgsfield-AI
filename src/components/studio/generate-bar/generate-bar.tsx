@@ -2,11 +2,11 @@
 
 import { Clapperboard, Image as ImageIcon, Sparkles, Video, Wand2 } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea";
 import { Toggle } from "@/components/ui/toggle";
-import { ASPECTS, DURATIONS, listModels, QUALITIES, type Model } from "@/lib/catalog";
+import { ASPECTS, DURATIONS, getModel, listModels, QUALITIES, type Model } from "@/lib/catalog";
 import { formatBalance, formatCost } from "@/lib/format";
 import { generate, InsufficientCreditsError } from "@/lib/generate";
 import { useLive } from "@/lib/hooks/use-live";
@@ -19,6 +19,9 @@ import { ModelChip } from "./model-chip";
 import { StartFrameChip } from "./start-frame-chip";
 
 const VIDEO_ONLY = "Video only";
+
+/** id of the prompt textarea, so the detail drawer can hand focus back to it on close. */
+export const PROMPT_INPUT_ID = "generate-prompt";
 
 interface ModeSettings {
   modelId: string;
@@ -90,6 +93,32 @@ export function GenerateBar({ projectId, generations }: { projectId: string; gen
   const [duration, setDuration] = useState<(typeof DURATIONS)[number]>(5);
   const [startFrameId, setStartFrameId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const promptRef = useRef<HTMLTextAreaElement>(null);
+
+  // Fills requested by the detail drawer (Turn to video, Recreate, Extend). Never submits.
+  const barFill = useAppStore((s) => s.barFill);
+  const appliedFill = useRef(barFill?.nonce ?? 0);
+  useEffect(() => {
+    if (!barFill || barFill.nonce === appliedFill.current) return;
+    appliedFill.current = barFill.nonce;
+    const { mode: nextMode, prompt: nextPrompt, modelId, aspect, quality, duration: nextDuration, startFrameId: frame } =
+      barFill;
+    setMode(nextMode);
+    if (nextPrompt !== undefined) setPrompt(nextPrompt);
+    setSettings((all) => {
+      const known = modelId && getModel(modelId)?.type === nextMode;
+      const patch: Partial<ModeSettings> = {
+        ...(known && { modelId }),
+        ...(aspect && (ASPECTS as readonly string[]).includes(aspect) && { aspect }),
+        ...(quality && QUALITIES[nextMode].includes(quality) && { quality }),
+      };
+      return { ...all, [nextMode]: { ...all[nextMode], ...patch } };
+    });
+    const validDuration = DURATIONS.find((d) => d === nextDuration);
+    if (validDuration) setDuration(validDuration);
+    if (frame !== undefined) setStartFrameId(frame);
+    promptRef.current?.focus();
+  }, [barFill]);
 
   const current = settings[mode];
   const isVideo = mode === "video";
@@ -172,6 +201,8 @@ export function GenerateBar({ projectId, generations }: { projectId: string; gen
       {/* Prompt and chips */}
       <div className="flex min-w-0 flex-1 basis-80 flex-col gap-2">
         <Textarea
+          ref={promptRef}
+          id={PROMPT_INPUT_ID}
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           placeholder="Describe what you want to make"

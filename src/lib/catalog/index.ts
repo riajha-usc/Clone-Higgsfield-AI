@@ -68,3 +68,18 @@ export function aspectRatio(aspect: string | undefined): number {
   const [w, h] = (aspect ?? "").split(":").map(Number);
   return w > 0 && h > 0 ? w / h : 1;
 }
+
+/**
+ * Output pixel size. Image quality sets the long side (1k = 1024, 2k = 2048);
+ * video quality sets the short side (480p, 720p).
+ */
+export function outputSize(type: GenerationType, aspect: string | undefined, quality: string | undefined) {
+  const ratio = aspectRatio(aspect);
+  const even = (n: number) => Math.round(n / 2) * 2;
+  if (type === "image") {
+    const long = quality === "1k" ? 1024 : 2048;
+    return ratio >= 1 ? { width: long, height: even(long / ratio) } : { width: even(long * ratio), height: long };
+  }
+  const short = parseInt(quality ?? "", 10) || 480;
+  return ratio >= 1 ? { width: even(short * ratio), height: short } : { width: short, height: even(short / ratio) };
+}

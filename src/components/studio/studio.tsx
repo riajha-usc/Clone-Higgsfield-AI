@@ -1,12 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useLive } from "@/lib/hooks/use-live";
 import { listGenerations, listProjects } from "@/lib/repo";
 import { useAppStore } from "@/lib/store";
 import { AssetGrid } from "./asset-grid";
+import { GenerationDrawer } from "./detail/generation-drawer";
 import { GenerateBar } from "./generate-bar/generate-bar";
 import { ProjectRail } from "./project-rail";
 import { ProjectTitle } from "./project-title";
@@ -23,7 +24,7 @@ export function Studio({ projectId }: { projectId: string }) {
 
   useEffect(() => {
     if (unknownProject && projects && projects.length > 0) {
-      router.replace(`/p/${projects[0].id}`);
+      router.replace(`/p/${projects[0].id}${window.location.search}`);
     }
   }, [unknownProject, projects, router]);
 
@@ -62,6 +63,12 @@ export function Studio({ projectId }: { projectId: string }) {
           </>
         )}
       </section>
+
+      {ready && (
+        <Suspense>
+          <GenerationDrawer projectId={projectId} projects={projects} />
+        </Suspense>
+      )}
     </div>
   );
 }

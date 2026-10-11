@@ -1,6 +1,7 @@
 "use client";
 
 import { Download, Heart, Loader2, MoreHorizontal, Trash2 } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 import {
@@ -15,6 +16,7 @@ import { formatCost } from "@/lib/format";
 import { deleteGeneration, updateGeneration } from "@/lib/repo";
 import type { Generation } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { detailHref } from "./detail/generation-drawer";
 import { GENERATION_DRAG_TYPE } from "./drag";
 
 const ROW_HEIGHT = 240;
@@ -58,6 +60,15 @@ export function GenerationTile({ generation }: { generation: Generation }) {
         <div className={cn("size-full", pending && "animate-pulse bg-[#18181b]")} />
       )}
 
+      {/* Covers the tile under the hover actions; opens the detail drawer. */}
+      <Link
+        href={detailHref(generation.projectId, generation.id)}
+        scroll={false}
+        draggable={false}
+        aria-label={`Open details: ${generation.prompt}`}
+        className="absolute inset-0 rounded-card focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-text"
+      />
+
       {pending && (
         <StatusPill className="bg-black/70 text-text">
           <Loader2 className="size-3.5 animate-spin" />
@@ -71,7 +82,7 @@ export function GenerationTile({ generation }: { generation: Generation }) {
       )}
 
       {generation.type === "video" && (
-        <span className="absolute left-2 top-2 rounded-pill bg-black/60 px-2 py-0.5 text-[11px] text-text backdrop-blur">
+        <span className="pointer-events-none absolute left-2 top-2 rounded-pill bg-black/60 px-2 py-0.5 text-[11px] text-text backdrop-blur">
           {preset ? `Motion · ${preset.displayName}` : "Video"}
         </span>
       )}
@@ -165,7 +176,7 @@ function StatusPill({
       role="status"
       title={title}
       className={cn(
-        "absolute left-1/2 top-1/2 inline-flex -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 whitespace-nowrap rounded-pill px-3 py-1 text-xs font-medium",
+        "pointer-events-none absolute left-1/2 top-1/2 inline-flex -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 whitespace-nowrap rounded-pill px-3 py-1 text-xs font-medium",
         className,
       )}
     >

@@ -11,3 +11,17 @@ export function formatCost(value: number): string {
 export function formatDate(timestamp: number): string {
   return new Date(timestamp).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
+
+/** "October 10, 2026 at 10:22 PM" */
+export function formatDateTime(timestamp: number): string {
+  const date = new Date(timestamp);
+  const day = date.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+  const time = date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  return `${day} at ${time}`;
+}
+
+/** Seconds as m:ss. */
+export function formatClock(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
