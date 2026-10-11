@@ -4,6 +4,7 @@ import { BUSY, REJECTED, type GenerationProvider, type JobState } from "./types"
 
 const MODEL = "gemini-2.5-flash-image";
 const TIMEOUT_MS = 50_000;
+const NO_FREE_TIER = "Gemini image generation isn't included in this key's free tier";
 const BLOCKED = new Set(["SAFETY", "PROHIBITED_CONTENT", "IMAGE_SAFETY", "BLOCKLIST", "SPII", "RECITATION"]);
 
 let client: GoogleGenAI | null = null;
@@ -56,6 +57,14 @@ async function render(prompt: string, aspect: string | undefined): Promise<JobSt
       return { status: "failed", reason: badKey ? "The server's Gemini key is not valid" : REJECTED };
     }
     console.error("gemini: generateContent failed", error);
+    // A free-tier key gets 429 with "limit: 0" for image models: it will never succeed, so say so.
+    if (error instanceof ApiError && error.status === 429 && isZeroFreeTierQuota(error.message)) {
+      return { status: "failed", reason: NO_FREE_TIER };
+    }
     return { status: "failed", reason: BUSY };
   }
+}
+
+function isZeroFreeTierQuota(message: string): boolean {
+  return /free_tier/i.test(message) && /limit:\s*0\b/.test(message);
 }
