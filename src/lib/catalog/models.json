@@ -1,0 +1,52 @@
+[
+  {
+    "id": "soul-2",
+    "displayName": "Soul 2",
+    "type": "image",
+    "provider": "pollinations",
+    "costPerGeneration": 0.125,
+    "requiresCapability": null,
+    "defaultParams": { "aspect": "1:1", "quality": "standard" },
+    "sortOrder": 10
+  },
+  {
+    "id": "flux-schnell",
+    "displayName": "FLUX Schnell",
+    "type": "image",
+    "provider": "pollinations",
+    "costPerGeneration": 0.5,
+    "requiresCapability": null,
+    "defaultParams": { "aspect": "1:1", "quality": "standard" },
+    "sortOrder": 20
+  },
+  {
+    "id": "nano-banana",
+    "displayName": "Nano Banana",
+    "type": "image",
+    "provider": "gemini",
+    "costPerGeneration": 2,
+    "requiresCapability": "gemini",
+    "defaultParams": { "aspect": "1:1", "quality": "high" },
+    "sortOrder": 30
+  },
+  {
+    "id": "motion-preview",
+    "displayName": "Motion preview (no AI video, free)",
+    "type": "video",
+    "provider": "motion",
+    "costPerGeneration": 1,
+    "requiresCapability": null,
+    "defaultParams": { "aspect": "16:9", "duration": 5, "presetId": "push-in" },
+    "sortOrder": 40
+  },
+  {
+    "id": "seedance-1-5",
+    "displayName": "Seedance 1.5",
+    "type": "video",
+    "provider": "fal",
+    "costPerGeneration": 5,
+    "requiresCapability": "fal",
+    "defaultParams": { "aspect": "16:9", "duration": 5, "quality": "480p" },
+    "sortOrder": 50
+  }
+]

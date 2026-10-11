@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { CreditBadge } from "./credit-badge";
 
 const NAV_LINKS = [
   { href: "/p/demo", label: "Studio" },
@@ -24,10 +25,7 @@ export function SiteHeader() {
             </Link>
           ))}
         </nav>
-        {/* Placeholder until the credits ledger exists */}
-        <span className="ml-auto rounded-pill border border-lime/30 bg-lime/10 px-3 py-1 text-sm font-medium tabular-nums text-lime">
-          10.0 credits
-        </span>
+        <CreditBadge />
       </div>
     </header>
   );

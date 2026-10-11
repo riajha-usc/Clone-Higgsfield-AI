@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import { AppBootstrap } from "@/components/layout/app-bootstrap";
 import { SiteHeader } from "@/components/layout/site-header";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -23,6 +24,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`dark ${inter.variable}`}>
       <body className="min-h-dvh bg-background font-sans text-foreground antialiased">
+        <AppBootstrap />
         <TooltipProvider>
           <SiteHeader />
           <main>{children}</main>

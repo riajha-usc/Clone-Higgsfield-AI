@@ -1,0 +1,8 @@
+[
+  { "id": "push-in", "displayName": "Push in", "description": "Slow dolly toward the subject.", "cssKeyframesName": "motion-push-in", "sortOrder": 10 },
+  { "id": "pull-out", "displayName": "Pull out", "description": "Slow dolly away to reveal the scene.", "cssKeyframesName": "motion-pull-out", "sortOrder": 20 },
+  { "id": "pan-left", "displayName": "Pan left", "description": "Camera glides from right to left.", "cssKeyframesName": "motion-pan-left", "sortOrder": 30 },
+  { "id": "pan-right", "displayName": "Pan right", "description": "Camera glides from left to right.", "cssKeyframesName": "motion-pan-right", "sortOrder": 40 },
+  { "id": "orbit", "displayName": "Orbit", "description": "Gentle arc around the subject.", "cssKeyframesName": "motion-orbit", "sortOrder": 50 },
+  { "id": "handheld", "displayName": "Handheld", "description": "Subtle shake like a handheld camera.", "cssKeyframesName": "motion-handheld", "sortOrder": 60 }
+]
