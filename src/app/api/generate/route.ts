@@ -4,8 +4,12 @@ import { getCapabilities, providerForModel, ProviderUnavailableError } from "@/l
 import type { GenerationParams } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+// Pollinations and Gemini render inside submit (Pollinations has a 20 s budget).
+export const maxDuration = 60;
 
 const MAX_PROMPT_LENGTH = 2000;
+// Gemini outputs are data URLs; they can be start frames too.
+const MAX_DATA_URL_LENGTH = 4_000_000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function badRequest(error: string, status = 400) {
@@ -30,6 +34,12 @@ function parseParams(raw: unknown): GenerationParams | null {
     params[key] = value;
   }
   return params;
+}
+
+function isStartFrameUrl(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  if (value.startsWith("data:image/")) return value.length <= MAX_DATA_URL_LENGTH;
+  return value.length <= 2048 && /^(\/samples\/|https:\/\/)/.test(value);
 }
 
 export async function POST(request: Request) {
@@ -60,13 +70,8 @@ export async function POST(request: Request) {
   const params = parseParams(body.params);
   if (!params) return badRequest("params is malformed");
   const { startFrameUrl } = body;
-  if (
-    startFrameUrl !== undefined &&
-    (typeof startFrameUrl !== "string" ||
-      startFrameUrl.length > 2048 ||
-      !/^(\/samples\/|https:\/\/)/.test(startFrameUrl))
-  ) {
-    return badRequest("startFrameUrl must be a sample path or an https URL");
+  if (startFrameUrl !== undefined && !isStartFrameUrl(startFrameUrl)) {
+    return badRequest("startFrameUrl must be a sample path, an https URL or an image data URL");
   }
   if (type === "video" && model.needsStartFrame && !startFrameUrl) {
     return badRequest(`${model.displayName} needs a start frame`);
@@ -74,7 +79,7 @@ export async function POST(request: Request) {
 
   try {
     const provider = providerForModel(model);
-    const providerJobId = await provider.submit({
+    const { jobId, state } = await provider.submit({
       generationId,
       type,
       modelId: model.id,
@@ -82,7 +87,7 @@ export async function POST(request: Request) {
       params,
       startFrameUrl,
     });
-    return NextResponse.json({ providerJobId, provider: provider.name });
+    return NextResponse.json({ providerJobId: jobId, provider: provider.name, state: state ?? null });
   } catch (error) {
     if (error instanceof ProviderUnavailableError) return badRequest(error.message, 501);
     console.error("generate: submit failed", error);

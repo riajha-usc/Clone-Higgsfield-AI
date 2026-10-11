@@ -12,4 +12,4 @@ npm install
 npm run dev
 ```
 
-The default providers are `mock`, so no API keys are needed.
+Images come from Pollinations (`GENERATION_PROVIDER_IMAGE=pollinations`), which is free and needs no key. Set it to `mock` to use bundled samples offline. Videos use `mock` (motion previews). Adding `GEMINI_API_KEY` enables the Nano Banana model. See `.env.example` for every option.

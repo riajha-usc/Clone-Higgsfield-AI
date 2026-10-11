@@ -2,6 +2,9 @@ import type { Capabilities, GenerationParams, GenerationType } from "@/lib/types
 import modelsJson from "./models.json";
 import presetsJson from "./presets.json";
 
+/** Capabilities that report whether an optional server key is set. */
+type KeyCapability = "pollinations" | "gemini" | "fal";
+
 export interface ModelDef {
   id: string;
   displayName: string;
@@ -9,7 +12,7 @@ export interface ModelDef {
   provider: string;
   costPerGeneration: number;
   /** Optional server key this model needs; null means always available. */
-  requiresCapability: keyof Capabilities | null;
+  requiresCapability: KeyCapability | null;
   defaultParams: GenerationParams;
   /** Video models that cannot do text-to-video and need a start frame. */
   needsStartFrame: boolean;
@@ -70,14 +73,14 @@ export function aspectRatio(aspect: string | undefined): number {
 }
 
 /**
- * Output pixel size. Image quality sets the long side (1k = 1024, 2k = 2048);
+ * Output pixel size. Image quality sets the long side (1k = 1024, 2k = 1536);
  * video quality sets the short side (480p, 720p).
  */
 export function outputSize(type: GenerationType, aspect: string | undefined, quality: string | undefined) {
   const ratio = aspectRatio(aspect);
   const even = (n: number) => Math.round(n / 2) * 2;
   if (type === "image") {
-    const long = quality === "1k" ? 1024 : 2048;
+    const long = quality === "1k" ? 1024 : 1536;
     return ratio >= 1 ? { width: long, height: even(long / ratio) } : { width: even(long * ratio), height: long };
   }
   const short = parseInt(quality ?? "", 10) || 480;

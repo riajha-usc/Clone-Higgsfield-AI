@@ -2,7 +2,7 @@
 
 import { Download, Heart, Loader2, MoreHorizontal, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   DropdownMenu,
@@ -14,6 +14,7 @@ import { aspectRatio, getModel, getPreset } from "@/lib/catalog";
 import { downloadOutput } from "@/lib/download";
 import { formatCost } from "@/lib/format";
 import { deleteGeneration, updateGeneration } from "@/lib/repo";
+import { useAppStore } from "@/lib/store";
 import type { Generation } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { detailHref } from "./detail/generation-drawer";
@@ -72,12 +73,12 @@ export function GenerationTile({ generation }: { generation: Generation }) {
       {pending && (
         <StatusPill className="bg-black/70 text-text">
           <Loader2 className="size-3.5 animate-spin" />
-          Generating
+          <PendingLabel generationId={generation.id} />
         </StatusPill>
       )}
       {generation.status === "failed" && (
-        <StatusPill className="bg-destructive/90 text-white" title={generation.error ?? undefined}>
-          Failed, credits refunded
+        <StatusPill className="bg-destructive/90 text-white">
+          {refundLabel(generation.cost)}
         </StatusPill>
       )}
 
@@ -136,6 +137,26 @@ export function GenerationTile({ generation }: { generation: Generation }) {
       </figcaption>
     </figure>
   );
+}
+
+export function refundLabel(cost: number): string {
+  return `Failed, ${formatCost(cost)} ${cost === 1 ? "credit" : "credits"} refunded`;
+}
+
+/** "Generating", or a countdown while the request waits for a rate-limit slot. */
+function PendingLabel({ generationId }: { generationId: string }) {
+  const startAt = useAppStore((s) => s.queuedUntil[generationId]);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!startAt) return;
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 250);
+    return () => clearInterval(timer);
+  }, [startAt]);
+
+  if (!startAt) return <>Generating</>;
+  return <>Queued, starting in {Math.max(1, Math.ceil((startAt - now) / 1000))}s</>;
 }
 
 function Output({ generation, animation }: { generation: Generation; animation?: string }) {

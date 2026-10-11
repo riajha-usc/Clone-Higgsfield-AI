@@ -157,9 +157,10 @@ export function GenerateBar({ projectId, generations }: { projectId: string; gen
           }),
         },
         parentGenerationId: isVideo ? (startFrame?.id ?? null) : null,
-        onQueued: () => {
+        onQueued: (_generation, startsInMs) => {
           setSubmitting(false);
-          toast(`Generating. ${formatCost(cost)} ${cost === 1 ? "credit" : "credits"} reserved.`);
+          const reserved = `${formatCost(cost)} ${cost === 1 ? "credit" : "credits"} reserved.`;
+          toast(startsInMs > 0 ? `Queued, starting in ${Math.ceil(startsInMs / 1000)}s. ${reserved}` : `Generating. ${reserved}`);
         },
       });
       if (result.status === "failed") {

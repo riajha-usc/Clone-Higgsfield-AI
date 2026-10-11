@@ -36,6 +36,7 @@ import { useAppStore, type BarFill } from "@/lib/store";
 import type { Generation, Project } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { PROMPT_INPUT_ID } from "../generate-bar/generate-bar";
+import { refundLabel } from "../generation-tile";
 import { PreviewPlayer } from "./preview-player";
 
 const EXTEND_PREFIX = "Continue:";
@@ -172,7 +173,7 @@ function Details({
     queued: "Queued",
     running: "Generating",
     succeeded: "Done",
-    failed: "Failed, credits refunded",
+    failed: refundLabel(generation.cost),
   }[generation.status];
 
   return (
@@ -332,7 +333,7 @@ function Preview({ generation }: { generation: Generation }) {
         className="flex w-full items-center justify-center rounded-card border border-dashed border-line px-6 text-center text-sm text-text-muted"
         style={{ aspectRatio: ratio }}
       >
-        No output. The credits for this generation were refunded.
+        {generation.error ?? "No output"}. The credits for this generation were refunded.
       </div>
     );
   }

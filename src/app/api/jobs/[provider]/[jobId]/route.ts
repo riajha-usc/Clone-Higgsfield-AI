@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { providerByName } from "@/lib/providers";
 
 export const dynamic = "force-dynamic";
+// A Pollinations poll retries up to three times, six seconds apart.
+export const maxDuration = 60;
 
 export async function GET(
   _request: Request,

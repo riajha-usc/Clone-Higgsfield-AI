@@ -29,6 +29,9 @@ interface AppState {
   setCapabilities: (capabilities: Capabilities) => void;
   /** Latest fill request; the nonce makes a repeat of the same fill still apply. */
   barFill: (BarFill & { nonce: number }) | null;
+  /** Generations waiting for a rate-limit slot, with the time they will start. Not persisted. */
+  queuedUntil: Record<string, number>;
+  setQueuedUntil: (generationId: string, startAt: number | null) => void;
   fillBar: (fill: BarFill) => void;
 }
 
@@ -40,5 +43,13 @@ export const useAppStore = create<AppState>((set) => ({
   setBootError: (message) => set({ bootError: message }),
   setCapabilities: (capabilities) => set({ capabilities }),
   barFill: null,
+  queuedUntil: {},
+  setQueuedUntil: (generationId, startAt) =>
+    set((s) => {
+      const next = { ...s.queuedUntil };
+      if (startAt === null) delete next[generationId];
+      else next[generationId] = startAt;
+      return { queuedUntil: next };
+    }),
   fillBar: (fill) => set((s) => ({ barFill: { ...fill, nonce: (s.barFill?.nonce ?? 0) + 1 } })),
 }));

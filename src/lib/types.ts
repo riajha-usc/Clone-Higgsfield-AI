@@ -66,4 +66,7 @@ export interface Capabilities {
   pollinations: boolean;
   gemini: boolean;
   fal: boolean;
+  /** "mock" when that type returns bundled samples, "live" when it calls real providers. */
+  imageMode: "mock" | "live";
+  videoMode: "mock" | "live";
 }

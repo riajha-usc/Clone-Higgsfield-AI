@@ -12,11 +12,14 @@ import {
   listGenerations,
   updateGeneration,
 } from "@/lib/repo";
+import { useAppStore } from "@/lib/store";
 import type { Generation, GenerationParams, GenerationType } from "@/lib/types";
 
 const POLL_INTERVAL_MS = 2_000;
 const MAX_POLL_DURATION_MS = 10 * 60 * 1000;
 const MAX_CONSECUTIVE_POLL_ERRORS = 5;
+/** Pollinations allows about one request every five seconds per IP. */
+const POLLINATIONS_GAP_MS = 5_000;
 
 export class InsufficientCreditsError extends Error {
   constructor(
@@ -35,12 +38,26 @@ export interface GenerateRequest {
   prompt: string;
   params?: GenerationParams;
   parentGenerationId?: string | null;
-  /** Called once the generation row and its debit exist, before the provider is contacted. */
-  onQueued?: (generation: Generation) => void;
+  /**
+   * Called once the generation row and its debit exist, before the provider is
+   * contacted. startsInMs is above zero when the request waits for a rate-limit slot.
+   */
+  onQueued?: (generation: Generation, startsInMs: number) => void;
 }
 
 /** Generations this tab is currently polling, so a resume never doubles up. */
 const active = new Set<string>();
+
+/** When the next Pollinations request may go out from this tab. */
+let nextPollinationsSlot = 0;
+
+/** Reserves the next free slot and returns how long to wait for it. */
+function reservePollinationsSlot(): number {
+  const now = Date.now();
+  const startAt = Math.max(now, nextPollinationsSlot);
+  nextPollinationsSlot = startAt + POLLINATIONS_GAP_MS;
+  return startAt - now;
+}
 
 /**
  * Debits the model cost, submits the job and polls it to completion. Resolves with
@@ -59,6 +76,8 @@ export async function generate(request: GenerateRequest): Promise<Generation> {
   if (balance < cost) throw new InsufficientCreditsError(balance, cost);
 
   const params = { ...model.defaultParams, ...request.params };
+  // Stored with the record so the same image can be reproduced later.
+  if (model.type === "image" && params.seed === undefined) params.seed = Math.floor(Math.random() * 1_000_000);
   const startFrame = params.startFrameGenerationId
     ? await getGeneration(params.startFrameGenerationId)
     : undefined;
@@ -79,9 +98,18 @@ export async function generate(request: GenerateRequest): Promise<Generation> {
   });
   await addLedgerEntry({ delta: -cost, reason: "generation_debit", generationId: generation.id });
   active.add(generation.id);
-  request.onQueued?.(generation);
+
+  const throttled = model.provider === "pollinations" && useAppStore.getState().capabilities?.imageMode === "live";
+  const waitMs = throttled ? reservePollinationsSlot() : 0;
+  request.onQueued?.(generation, waitMs);
 
   try {
+    if (waitMs > 0) {
+      const { setQueuedUntil } = useAppStore.getState();
+      setQueuedUntil(generation.id, Date.now() + waitMs);
+      await sleep(waitMs);
+      setQueuedUntil(generation.id, null);
+    }
     const response = await fetch("/api/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -103,6 +131,10 @@ export async function generate(request: GenerateRequest): Promise<Generation> {
       provider: body.provider,
       providerJobId: body.providerJobId,
     });
+    // Synchronous providers (Pollinations, Gemini) usually answer on submit.
+    const state = body.state as JobState | null;
+    if (state?.status === "succeeded") return await succeed(generation.id, state.outputUrl);
+    if (state?.status === "failed") return await fail(generation.id, state.reason);
     return await pollUntilDone(generation.id, body.provider, body.providerJobId);
   } catch (error) {
     return await fail(generation.id, error instanceof Error ? error.message : "Generation failed");
@@ -157,19 +189,28 @@ async function pollUntilDone(id: string, provider: string, jobId: string): Promi
       continue;
     }
 
-    if (state.status === "succeeded") {
-      await updateGeneration(id, {
-        status: "succeeded",
-        outputUrl: state.outputUrl,
-        thumbnailUrl: state.outputUrl,
-        error: null,
-        completedAt: Date.now(),
-      });
-      return (await getGeneration(id))!;
-    }
+    if (state.status === "succeeded") return succeed(id, state.outputUrl);
     if (state.status === "failed") return fail(id, state.reason);
   }
   return fail(id, "Timed out waiting for the provider");
+}
+
+async function succeed(id: string, providerUrl: string): Promise<Generation> {
+  const current = await getGeneration(id);
+  if (!current) throw new Error(`Generation ${id} disappeared`);
+  // A motion preview's artifact is its start frame; the player animates it.
+  let outputUrl = providerUrl;
+  if (getModel(current.modelId)?.provider === "motion" && current.params.startFrameGenerationId) {
+    outputUrl = (await getGeneration(current.params.startFrameGenerationId))?.outputUrl ?? providerUrl;
+  }
+  await updateGeneration(id, {
+    status: "succeeded",
+    outputUrl,
+    thumbnailUrl: outputUrl,
+    error: null,
+    completedAt: Date.now(),
+  });
+  return (await getGeneration(id))!;
 }
 
 /** Marks a generation failed and refunds its full cost, once. */

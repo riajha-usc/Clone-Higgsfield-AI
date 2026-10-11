@@ -28,7 +28,7 @@ export const mockProvider: GenerationProvider = {
     const startFrame = input.startFrameUrl ? SAMPLE_FILES.indexOf(input.startFrameUrl) : -1;
     const sample =
       startFrame >= 0 ? startFrame : Math.floor(Math.random() * SAMPLE_FILES.length);
-    return [startedAt.toString(36), delay.toString(36), sample.toString(36)].join(".");
+    return { jobId: [startedAt.toString(36), delay.toString(36), sample.toString(36)].join(".") };
   },
 
   async poll(jobId): Promise<JobState> {
