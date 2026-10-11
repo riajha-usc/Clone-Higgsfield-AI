@@ -6,6 +6,8 @@ export interface ProviderInput {
   modelId: string;
   prompt: string;
   params: GenerationParams;
+  /** Output URL of the start frame generation, for video jobs that have one. */
+  startFrameUrl?: string;
 }
 
 export type JobState =

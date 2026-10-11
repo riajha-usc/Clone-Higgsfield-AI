@@ -11,6 +11,8 @@ export interface ModelDef {
   /** Optional server key this model needs; null means always available. */
   requiresCapability: keyof Capabilities | null;
   defaultParams: GenerationParams;
+  /** Video models that cannot do text-to-video and need a start frame. */
+  needsStartFrame: boolean;
   sortOrder: number;
 }
 
@@ -44,4 +46,25 @@ export function isModelEnabled(model: ModelDef, caps: Capabilities | null): bool
 
 export function listModels(caps: Capabilities | null): Model[] {
   return MODELS.map((m) => ({ ...m, enabled: isModelEnabled(m, caps) }));
+}
+
+export const ASPECTS = ["1:1", "3:4", "4:3", "16:9", "9:16"] as const;
+export const QUALITIES: Record<GenerationType, readonly string[]> = {
+  image: ["1k", "2k"],
+  video: ["480p", "720p"],
+};
+export const DURATIONS = [5, 8] as const;
+
+export const PROVIDER_LABELS: Record<string, string> = {
+  pollinations: "Pollinations",
+  gemini: "Gemini",
+  fal: "fal.ai",
+  motion: "Motion",
+  mock: "Mock",
+};
+
+/** "16:9" -> 16/9. Falls back to 1 for anything malformed. */
+export function aspectRatio(aspect: string | undefined): number {
+  const [w, h] = (aspect ?? "").split(":").map(Number);
+  return w > 0 && h > 0 ? w / h : 1;
 }

@@ -1,12 +1,9 @@
 "use client";
 
+import { formatBalance } from "@/lib/format";
 import { useLive } from "@/lib/hooks/use-live";
 import { getBalance } from "@/lib/repo";
 import { useAppStore } from "@/lib/store";
-
-export function formatCredits(value: number): string {
-  return value.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 3 });
-}
 
 export function CreditBadge() {
   const ready = useAppStore((s) => s.ready);
@@ -15,10 +12,12 @@ export function CreditBadge() {
 
   return (
     <span
-      className="ml-auto rounded-pill border border-lime/30 bg-lime/10 px-3 py-1 text-sm font-medium tabular-nums text-lime"
+      className="ml-auto shrink-0 whitespace-nowrap rounded-pill border border-lime/30 bg-lime/10 px-3 py-1 text-sm font-medium tabular-nums text-lime"
       aria-live="polite"
+      title="Your credit balance"
     >
-      {loaded ? `${formatCredits(balance)} credits` : "… credits"}
+      {loaded ? formatBalance(balance) : "…"}
+      <span className="hidden min-[420px]:inline"> credits</span>
     </span>
   );
 }

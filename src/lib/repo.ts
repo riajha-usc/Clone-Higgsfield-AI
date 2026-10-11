@@ -74,8 +74,9 @@ export async function getSettings(): Promise<Settings | undefined> {
 
 // ---------------------------------------------------------------- projects
 
+/** Newest first by creation, so the list does not reshuffle as projects are used. */
 export async function listProjects(): Promise<Project[]> {
-  return db().projects.orderBy("updatedAt").reverse().toArray();
+  return db().projects.orderBy("createdAt").reverse().toArray();
 }
 
 export async function createProject(name: string): Promise<Project> {
@@ -83,6 +84,10 @@ export async function createProject(name: string): Promise<Project> {
   const project: Project = { id: crypto.randomUUID(), name, createdAt: now, updatedAt: now };
   await db().projects.add(project);
   return project;
+}
+
+export async function renameProject(id: string, name: string): Promise<void> {
+  await db().projects.update(id, { name, updatedAt: Date.now() });
 }
 
 // ---------------------------------------------------------------- generations
@@ -136,6 +141,11 @@ export async function updateGeneration(
   patch: Partial<Omit<Generation, "id">>,
 ): Promise<void> {
   await db().generations.update(id, patch);
+}
+
+/** Removes the generation row. Ledger entries that reference it stay, so the balance is unchanged. */
+export async function deleteGeneration(id: string): Promise<void> {
+  await db().generations.delete(id);
 }
 
 export async function getGeneration(id: string): Promise<Generation | undefined> {
@@ -221,7 +231,7 @@ export async function ensureSeeded(): Promise<void> {
           "Rain-soaked neon alley in Tokyo at night, reflections on wet asphalt, a lone figure with a clear umbrella, cinematic 35mm, shallow depth of field",
         enhancedPrompt: null,
         modelId: "soul-2",
-        params: { aspect: "1:1", quality: "standard", seed: 48213 },
+        params: { aspect: "3:4", quality: "2k", seed: 48213 },
         cost: 0.125,
         provider: "pollinations",
         providerJobId: null,
@@ -242,7 +252,7 @@ export async function ensureSeeded(): Promise<void> {
           "Golden hour over rolling sand dunes, long shadows, a camel caravan cresting the ridge, warm haze, wide-angle landscape photography",
         enhancedPrompt: null,
         modelId: "flux-schnell",
-        params: { aspect: "1:1", quality: "standard", seed: 90117 },
+        params: { aspect: "3:4", quality: "1k", seed: 90117 },
         cost: 0.5,
         provider: "pollinations",
         providerJobId: null,
@@ -262,7 +272,13 @@ export async function ensureSeeded(): Promise<void> {
         prompt: "Slow push in on the caravan as the sun clears the dunes",
         enhancedPrompt: null,
         modelId: "motion-preview",
-        params: { aspect: "1:1", duration: 5, presetId: "push-in", startFrameGenerationId: dunesId },
+        params: {
+          aspect: "16:9",
+          quality: "480p",
+          duration: 5,
+          presetId: "push-in",
+          startFrameGenerationId: dunesId,
+        },
         cost: 1,
         provider: "motion",
         providerJobId: null,

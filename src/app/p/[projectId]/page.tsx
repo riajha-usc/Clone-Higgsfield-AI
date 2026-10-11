@@ -1,6 +1,6 @@
-import { ProjectView } from "@/components/studio/project-view";
+import { Studio } from "@/components/studio/studio";
 
 export default async function ProjectPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params;
-  return <ProjectView projectId={projectId} />;
+  return <Studio projectId={projectId} />;
 }

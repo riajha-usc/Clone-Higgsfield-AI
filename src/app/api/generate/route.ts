@@ -56,11 +56,21 @@ export async function POST(request: Request) {
   if (typeof prompt !== "string" || prompt.length > MAX_PROMPT_LENGTH) {
     return badRequest(`prompt must be a string of at most ${MAX_PROMPT_LENGTH} characters`);
   }
-  if (type === "image" && prompt.trim() === "") {
-    return badRequest("Image generations need a prompt");
-  }
+  if (prompt.trim() === "") return badRequest("prompt is empty");
   const params = parseParams(body.params);
   if (!params) return badRequest("params is malformed");
+  const { startFrameUrl } = body;
+  if (
+    startFrameUrl !== undefined &&
+    (typeof startFrameUrl !== "string" ||
+      startFrameUrl.length > 2048 ||
+      !/^(\/samples\/|https:\/\/)/.test(startFrameUrl))
+  ) {
+    return badRequest("startFrameUrl must be a sample path or an https URL");
+  }
+  if (type === "video" && model.needsStartFrame && !startFrameUrl) {
+    return badRequest(`${model.displayName} needs a start frame`);
+  }
 
   try {
     const provider = providerForModel(model);
@@ -70,6 +80,7 @@ export async function POST(request: Request) {
       modelId: model.id,
       prompt: prompt.trim(),
       params,
+      startFrameUrl,
     });
     return NextResponse.json({ providerJobId, provider: provider.name });
   } catch (error) {

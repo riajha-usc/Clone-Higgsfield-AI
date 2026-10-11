@@ -28,7 +28,7 @@ export default function RootLayout({
         <TooltipProvider>
           <SiteHeader />
           <main>{children}</main>
-          <Toaster theme="dark" />
+          <Toaster theme="dark" position="top-center" />
         </TooltipProvider>
       </body>
     </html>

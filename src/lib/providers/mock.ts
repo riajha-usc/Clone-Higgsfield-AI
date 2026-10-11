@@ -21,10 +21,13 @@ const PENDING_MS = 1_000;
 export const mockProvider: GenerationProvider = {
   name: "mock",
 
-  async submit() {
+  async submit(input) {
     const startedAt = Date.now();
     const delay = MIN_DELAY_MS + Math.floor(Math.random() * (MAX_DELAY_MS - MIN_DELAY_MS + 1));
-    const sample = Math.floor(Math.random() * SAMPLE_FILES.length);
+    // A video with a bundled start frame animates that frame, like the motion preview does.
+    const startFrame = input.startFrameUrl ? SAMPLE_FILES.indexOf(input.startFrameUrl) : -1;
+    const sample =
+      startFrame >= 0 ? startFrame : Math.floor(Math.random() * SAMPLE_FILES.length);
     return [startedAt.toString(36), delay.toString(36), sample.toString(36)].join(".");
   },
 

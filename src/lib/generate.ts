@@ -35,6 +35,8 @@ export interface GenerateRequest {
   prompt: string;
   params?: GenerationParams;
   parentGenerationId?: string | null;
+  /** Called once the generation row and its debit exist, before the provider is contacted. */
+  onQueued?: (generation: Generation) => void;
 }
 
 /** Generations this tab is currently polling, so a resume never doubles up. */
@@ -57,6 +59,15 @@ export async function generate(request: GenerateRequest): Promise<Generation> {
   if (balance < cost) throw new InsufficientCreditsError(balance, cost);
 
   const params = { ...model.defaultParams, ...request.params };
+  const startFrame = params.startFrameGenerationId
+    ? await getGeneration(params.startFrameGenerationId)
+    : undefined;
+  if (params.startFrameGenerationId && !startFrame?.outputUrl) {
+    throw new Error("The start frame is missing or not finished");
+  }
+  if (model.type === "video" && model.needsStartFrame && !startFrame) {
+    throw new Error(`${model.displayName} needs a start frame`);
+  }
   const generation = await createGeneration({
     projectId: request.projectId,
     type: request.type,
@@ -68,6 +79,7 @@ export async function generate(request: GenerateRequest): Promise<Generation> {
   });
   await addLedgerEntry({ delta: -cost, reason: "generation_debit", generationId: generation.id });
   active.add(generation.id);
+  request.onQueued?.(generation);
 
   try {
     const response = await fetch("/api/generate", {
@@ -79,6 +91,7 @@ export async function generate(request: GenerateRequest): Promise<Generation> {
         modelId: generation.modelId,
         prompt: generation.prompt,
         params,
+        startFrameUrl: startFrame?.outputUrl ?? undefined,
       }),
     });
     const body = await response.json().catch(() => ({}));

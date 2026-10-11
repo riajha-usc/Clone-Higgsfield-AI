@@ -6,8 +6,12 @@
     "provider": "pollinations",
     "costPerGeneration": 0.125,
     "requiresCapability": null,
-    "defaultParams": { "aspect": "1:1", "quality": "standard" },
-    "sortOrder": 10
+    "defaultParams": {
+      "aspect": "3:4",
+      "quality": "2k"
+    },
+    "sortOrder": 10,
+    "needsStartFrame": false
   },
   {
     "id": "flux-schnell",
@@ -16,8 +20,12 @@
     "provider": "pollinations",
     "costPerGeneration": 0.5,
     "requiresCapability": null,
-    "defaultParams": { "aspect": "1:1", "quality": "standard" },
-    "sortOrder": 20
+    "defaultParams": {
+      "aspect": "3:4",
+      "quality": "2k"
+    },
+    "sortOrder": 20,
+    "needsStartFrame": false
   },
   {
     "id": "nano-banana",
@@ -26,8 +34,12 @@
     "provider": "gemini",
     "costPerGeneration": 2,
     "requiresCapability": "gemini",
-    "defaultParams": { "aspect": "1:1", "quality": "high" },
-    "sortOrder": 30
+    "defaultParams": {
+      "aspect": "3:4",
+      "quality": "2k"
+    },
+    "sortOrder": 30,
+    "needsStartFrame": false
   },
   {
     "id": "motion-preview",
@@ -36,8 +48,14 @@
     "provider": "motion",
     "costPerGeneration": 1,
     "requiresCapability": null,
-    "defaultParams": { "aspect": "16:9", "duration": 5, "presetId": "push-in" },
-    "sortOrder": 40
+    "defaultParams": {
+      "aspect": "16:9",
+      "quality": "480p",
+      "duration": 5,
+      "presetId": "push-in"
+    },
+    "sortOrder": 40,
+    "needsStartFrame": true
   },
   {
     "id": "seedance-1-5",
@@ -46,7 +64,12 @@
     "provider": "fal",
     "costPerGeneration": 5,
     "requiresCapability": "fal",
-    "defaultParams": { "aspect": "16:9", "duration": 5, "quality": "480p" },
-    "sortOrder": 50
+    "defaultParams": {
+      "aspect": "16:9",
+      "quality": "480p",
+      "duration": 5
+    },
+    "sortOrder": 50,
+    "needsStartFrame": false
   }
 ]

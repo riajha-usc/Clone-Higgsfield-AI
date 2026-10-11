@@ -16,6 +16,7 @@
   --color-text-muted: var(--text-muted);
   --color-lime: var(--lime);
   --color-lime-foreground: var(--lime-foreground);
+  --color-warning: var(--warning);
   --radius-card: 12px;
   --radius-pill: 999px;
   --font-heading: var(--font-sans);
@@ -66,6 +67,7 @@
   --text-muted: #9a9aa3;
   --lime: #d8ff3d; /* primary action + credit balance only */
   --lime-foreground: #0b0b0c;
+  --warning: #f5b544;
 
   /* shadcn/ui semantic tokens mapped onto the palette above */
   --background: var(--bg);
