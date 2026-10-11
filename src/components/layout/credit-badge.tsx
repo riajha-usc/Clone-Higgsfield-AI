@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { formatBalance } from "@/lib/format";
 import { useLive } from "@/lib/hooks/use-live";
 import { getBalance } from "@/lib/repo";
@@ -11,13 +12,14 @@ export function CreditBadge() {
   const loaded = ready && balance !== undefined;
 
   return (
-    <span
-      className="ml-auto shrink-0 whitespace-nowrap rounded-pill border border-lime/30 bg-lime/10 px-3 py-1 text-sm font-medium tabular-nums text-lime"
+    <Link
+      href="/account"
+      className="ml-auto shrink-0 whitespace-nowrap rounded-pill border border-lime/30 bg-lime/10 px-3 py-1 text-sm font-medium tabular-nums text-lime transition-colors hover:bg-lime/20 focus-visible:outline-2 focus-visible:outline-lime"
       aria-live="polite"
       title="Your credit balance"
     >
       {loaded ? formatBalance(balance) : "…"}
       <span className="hidden min-[420px]:inline"> credits</span>
-    </span>
+    </Link>
   );
 }

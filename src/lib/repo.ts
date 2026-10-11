@@ -7,8 +7,10 @@ import type {
   Generation,
   LedgerEntry,
   LedgerReason,
+  Plan,
   Project,
   Settings,
+  Term,
 } from "@/lib/types";
 
 class CloneDatabase extends Dexie {
@@ -66,10 +68,43 @@ export async function addLedgerEntry(entry: {
   return row;
 }
 
+/** Oldest first, so a running balance can be summed down the list. */
+export async function listLedger(): Promise<LedgerEntry[]> {
+  return db().ledger.orderBy("createdAt").toArray();
+}
+
 // ---------------------------------------------------------------- settings
 
 export async function getSettings(): Promise<Settings | undefined> {
   return db().settings.get("settings");
+}
+
+/** Grants the plan's credits and records the plan, together or not at all. */
+export async function upgradePlan(plan: Plan, term: Term, credits: number): Promise<void> {
+  const d = db();
+  await d.transaction("rw", d.settings, d.ledger, async () => {
+    await d.ledger.add({
+      id: crypto.randomUUID(),
+      delta: credits,
+      reason: "upgrade_grant",
+      generationId: null,
+      createdAt: Date.now(),
+    });
+    await d.settings.update("settings", { plan, term });
+  });
+}
+
+/** Back to free. Credits already granted stay. */
+export async function cancelPlan(): Promise<void> {
+  await db().settings.update("settings", { plan: "free", term: "monthly" });
+}
+
+/** Deletes the whole local database and seeds a fresh first-run state. */
+export async function resetDemo(): Promise<void> {
+  const d = db();
+  await d.delete();
+  instance = null;
+  await ensureSeeded();
 }
 
 // ---------------------------------------------------------------- projects
