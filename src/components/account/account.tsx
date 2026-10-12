@@ -16,8 +16,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { formatBalance, formatCost, formatDateTime } from "@/lib/format";
 import { useLive } from "@/lib/hooks/use-live";
 import { chargeFor, formatCredits, formatUsd, getPlan } from "@/lib/plans";
-import { cancelPlan, getSettings, listLedger, resetDemo } from "@/lib/repo";
-import type { LedgerReason } from "@/lib/types";
+import { getModel } from "@/lib/catalog";
+import { cancelPlan, getSettings, listGenerations, listLedger, resetDemo } from "@/lib/repo";
+import type { Generation, LedgerReason } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const REASON_LABELS: Record<LedgerReason, string> = {
@@ -30,6 +31,8 @@ const REASON_LABELS: Record<LedgerReason, string> = {
 export function Account() {
   const settings = useLive(() => getSettings(), []);
   const ledger = useLive(() => listLedger(), []);
+  // Debits and refunds name the generation they were for.
+  const generations = useLive(async () => new Map((await listGenerations()).map((g) => [g.id, g])), []);
   const [confirmReset, setConfirmReset] = useState(false);
   const [resetting, setResetting] = useState(false);
 
@@ -144,7 +147,12 @@ export function Account() {
                 rows.map(({ entry, balance: after }) => (
                   <tr key={entry.id} className="border-b border-line last:border-0">
                     <td className="px-3 py-3 text-text-muted sm:whitespace-nowrap sm:px-4">{formatDateTime(entry.createdAt)}</td>
-                    <td className="px-3 py-3 sm:px-4">{REASON_LABELS[entry.reason] ?? entry.reason}</td>
+                    <td className="px-3 py-3 sm:px-4">
+                      {REASON_LABELS[entry.reason] ?? entry.reason}
+                      {entry.generationId && (
+                        <GenerationRef generation={generations?.get(entry.generationId)} id={entry.generationId} />
+                      )}
+                    </td>
                     <td
                       className={cn(
                         "whitespace-nowrap px-3 py-3 text-right tabular-nums sm:px-4",
@@ -194,5 +202,22 @@ export function Account() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+/** Which generation a debit or refund was for, linking to its details. */
+function GenerationRef({ generation, id }: { generation: Generation | undefined; id: string }) {
+  if (!generation) {
+    return <span className="block text-xs text-text-muted">For a generation that was later deleted</span>;
+  }
+  const model = getModel(generation.modelId)?.displayName.replace(/\s*\(.*\)$/, "") ?? generation.modelId;
+  return (
+    <Link
+      href={`/library?g=${encodeURIComponent(id)}`}
+      className="block max-w-xs truncate text-xs text-text-muted underline-offset-2 hover:text-text hover:underline"
+      title={generation.prompt}
+    >
+      {model}, &ldquo;{generation.prompt}&rdquo;
+    </Link>
   );
 }

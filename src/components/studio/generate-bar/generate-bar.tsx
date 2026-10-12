@@ -82,8 +82,8 @@ function evaluate({
   }
 
   const message = `This will cost ${formatCost(cost)}. You will have ${formatBalance(balance - cost)} left.`;
-  // An empty prompt quietly disables the button; the cost line still informs.
-  if (prompt.trim() === "") return { canSubmit: false, tone: "muted", message };
+  // A disabled Generate always says why.
+  if (prompt.trim() === "") return { canSubmit: false, tone: "muted", message: `Write a prompt to generate. ${message}` };
   return { canSubmit: true, message };
 }
 

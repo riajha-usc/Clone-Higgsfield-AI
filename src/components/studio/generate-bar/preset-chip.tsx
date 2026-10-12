@@ -36,11 +36,11 @@ export function PresetChip({
             <Clapperboard className="size-3.5 text-text-muted" />
           </ChipButton>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-64" aria-label="Camera move">
+        <DropdownMenuContent align="start" className="w-72" aria-label="Camera move">
           <DropdownMenuRadioGroup value={value} onValueChange={onChange}>
             {PRESETS.map((preset) => (
               <DropdownMenuRadioItem key={preset.id} value={preset.id} className="gap-3 py-1.5">
-                <span className="relative h-9 w-14 shrink-0 overflow-hidden rounded-md border border-line bg-bg" aria-hidden>
+                <span className="relative h-12 w-20 shrink-0 overflow-hidden rounded-md border border-line bg-bg" aria-hidden>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={frameUrl ?? SAMPLE_FRAME}
