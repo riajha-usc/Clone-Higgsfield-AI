@@ -30,7 +30,7 @@ All server-side. Keys never reach the browser; `/api/capabilities` only reports 
 |---|---|---|
 | `GENERATION_PROVIDER_IMAGE` | Yes | `mock`, or `pollinations` / `live` for real providers. See the provider switch below. |
 | `GENERATION_PROVIDER_VIDEO` | Yes | `mock`, or `live` for real providers. |
-| `POLLINATIONS_KEY` | Recommended | Sent as a Bearer token. Without it, Pollinations allows only a few new images per IP before answering 402, and quietly swaps `flux` for a smaller model. Free at [enter.pollinations.ai](https://enter.pollinations.ai). |
+| `POLLINATIONS_KEY` | Recommended | A secret `sk_` key from [enter.pollinations.ai](https://enter.pollinations.ai/keys). With it, images are generated on `gen.pollinations.ai` with real FLUX at the requested size and served through `/api/media/pollinations`, which adds the key on the server and caches each image for a year at the CDN. Without it, the free legacy endpoint is used directly: it allows only a few new images per IP before answering 402 and quietly swaps `flux` for a smaller model. |
 | `GEMINI_API_KEY` | Optional | Enables Nano Banana (`gemini-2.5-flash-image`) and makes prompt enhancement use Gemini instead of the built-in template. A free-tier key has no image allowance (Google answers 429 with "limit: 0"), so Nano Banana needs billing on the Google AI Studio project. |
 | `FAL_KEY` | Optional | Enables Seedance 1.5 Pro image-to-video (480p, 5 credits) through fal's queue API. |
 | `POLLINATIONS_BASE_URL` | Testing only | Points Pollinations somewhere else. `http://127.0.0.1:9/` forces a failure, to watch the full refund. |
@@ -53,7 +53,9 @@ Every provider implements one interface (`src/lib/providers/types.ts`): `submit(
 | Motion preview | video | 1 | motion (no AI video) | a start frame |
 | Seedance 1.5 Pro | video | 5 | fal.ai | `FAL_KEY` and a start frame |
 
-Models whose key is missing stay listed but disabled ("needs API key"), and the server refuses them too. Failed generations refund their full cost to the ledger.
+Models whose key is missing stay listed but disabled ("needs API key"), and the server refuses them too. Failed generations refund their full cost to the ledger, and the tile says how much.
+
+FLUX on Pollinations snaps large requests to a few fixed sizes, so image requests are capped at 768×1024 pixels (3:4 comes back exactly 768×1024) and the real size is read from the returned file. The drawer's Size row shows what was actually produced.
 
 ## Deploy
 

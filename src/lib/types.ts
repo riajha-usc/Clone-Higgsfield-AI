@@ -40,6 +40,9 @@ export interface GenerationParams {
   startFrameGenerationId?: string;
   /** Start frame taken from an element's image (an upload or a generation in another project). */
   startFrameElementId?: string;
+  /** The output's real pixel size when the provider reports it (it can differ from the request). */
+  outputWidth?: number;
+  outputHeight?: number;
 }
 
 export type ElementType = "character" | "location";

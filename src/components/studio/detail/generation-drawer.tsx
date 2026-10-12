@@ -197,7 +197,10 @@ function Details({
       parentId: generation.id,
     });
 
-  const size = outputSize(generation.type, params.aspect, params.quality);
+  const size =
+    params.outputWidth && params.outputHeight
+      ? { width: params.outputWidth, height: params.outputHeight }
+      : outputSize(generation.type, params.aspect, params.quality);
   const statusLabel = {
     queued: "Queued",
     running: "Generating",

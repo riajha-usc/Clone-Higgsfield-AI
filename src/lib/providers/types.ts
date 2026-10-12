@@ -13,7 +13,8 @@ export interface ProviderInput {
 export type JobState =
   | { status: "pending" }
   | { status: "running" }
-  | { status: "succeeded"; outputUrl: string }
+  /** width and height, when known, are the output's real pixel size. */
+  | { status: "succeeded"; outputUrl: string; width?: number; height?: number }
   | { status: "failed"; reason: string };
 
 /** Readable failure reasons shared by the real providers. */

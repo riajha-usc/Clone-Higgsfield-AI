@@ -159,7 +159,7 @@ export async function generate(request: GenerateRequest): Promise<Generation> {
     });
     // Synchronous providers (Pollinations, Gemini) usually answer on submit.
     const state = body.state as JobState | null;
-    if (state?.status === "succeeded") return await succeed(generation.id, state.outputUrl);
+    if (state?.status === "succeeded") return await succeed(generation.id, state.outputUrl, state);
     if (state?.status === "failed") return await fail(generation.id, state.reason);
     return await pollUntilDone(generation.id, body.provider, body.providerJobId);
   } catch (error) {
@@ -216,7 +216,7 @@ async function pollUntilDone(id: string, provider: string, jobId: string): Promi
       continue;
     }
 
-    if (state.status === "succeeded") return succeed(id, state.outputUrl);
+    if (state.status === "succeeded") return succeed(id, state.outputUrl, state);
     if (state.status === "failed") return fail(id, state.reason);
   }
   return fail(id, "The provider took more than 10 minutes, so it was stopped");
@@ -232,7 +232,11 @@ async function startFrameUrlFor(params: GenerationParams): Promise<string | null
   return null;
 }
 
-async function succeed(id: string, providerUrl: string): Promise<Generation> {
+async function succeed(
+  id: string,
+  providerUrl: string,
+  size?: { width?: number; height?: number },
+): Promise<Generation> {
   const current = await getGeneration(id);
   if (!current) throw new Error(`Generation ${id} disappeared`);
   // A motion preview's artifact is its start frame; the player animates it.
@@ -243,6 +247,7 @@ async function succeed(id: string, providerUrl: string): Promise<Generation> {
   const isVideoFile = /\.(mp4|webm|mov)(\?|$)/i.test(outputUrl);
   await updateGeneration(id, {
     status: "succeeded",
+    ...(size?.width && size.height && { params: { ...current.params, outputWidth: size.width, outputHeight: size.height } }),
     outputUrl,
     thumbnailUrl: isVideoFile ? (startFrameUrl ?? null) : outputUrl,
     error: null,

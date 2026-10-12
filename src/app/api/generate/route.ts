@@ -39,7 +39,7 @@ function parseParams(raw: unknown): GenerationParams | null {
 function isStartFrameUrl(value: unknown): value is string {
   if (typeof value !== "string") return false;
   if (value.startsWith("data:image/")) return value.length <= MAX_DATA_URL_LENGTH;
-  return value.length <= 2048 && /^(\/samples\/|https:\/\/)/.test(value);
+  return value.length <= 4096 && /^(\/samples\/|\/api\/media\/|https:\/\/)/.test(value);
 }
 
 export async function POST(request: Request) {
