@@ -187,12 +187,15 @@ export async function getGeneration(id: string): Promise<Generation | undefined>
   return db().generations.get(id);
 }
 
-/** Ancestors of a generation, root first, ending with the generation itself. */
-export async function getLineage(id: string): Promise<Generation[]> {
+/**
+ * Ancestors of a generation, root first, ending with the generation itself.
+ * maxAncestors caps how far up it walks (the chain then has at most that many + 1).
+ */
+export async function getLineage(id: string, maxAncestors = Infinity): Promise<Generation[]> {
   const chain: Generation[] = [];
   const seen = new Set<string>();
   let current = await getGeneration(id);
-  while (current && !seen.has(current.id)) {
+  while (current && !seen.has(current.id) && chain.length <= maxAncestors) {
     seen.add(current.id);
     chain.unshift(current);
     current = current.parentGenerationId
@@ -200,6 +203,12 @@ export async function getLineage(id: string): Promise<Generation[]> {
       : undefined;
   }
   return chain;
+}
+
+/** Generations made from this one (its direct children), newest first. */
+export async function listChildren(id: string): Promise<Generation[]> {
+  const children = await db().generations.where("parentGenerationId").equals(id).toArray();
+  return children.sort((a, b) => b.createdAt - a.createdAt);
 }
 
 // ---------------------------------------------------------------- live queries

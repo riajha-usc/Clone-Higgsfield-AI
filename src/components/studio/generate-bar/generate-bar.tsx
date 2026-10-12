@@ -1,6 +1,6 @@
 "use client";
 
-import { Clapperboard, Image as ImageIcon, Sparkles, Video, Wand2 } from "lucide-react";
+import { Clapperboard, FastForward, Image as ImageIcon, Sparkles, Video, Wand2, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -14,7 +14,8 @@ import { getBalance } from "@/lib/repo";
 import { useAppStore } from "@/lib/store";
 import type { Generation, GenerationType } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { ChipButton, ChipSlot, OptionChip } from "./chip";
+import { ChipButton, chipClass, ChipSlot, OptionChip } from "./chip";
+import { EnhancedPromptBlock, useEnhancement } from "./enhanced-prompt";
 import { ModelChip } from "./model-chip";
 import { StartFrameChip } from "./start-frame-chip";
 
@@ -93,18 +94,29 @@ export function GenerateBar({ projectId, generations }: { projectId: string; gen
   const [duration, setDuration] = useState<(typeof DURATIONS)[number]>(5);
   const [startFrameId, setStartFrameId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [enhanceOn, setEnhanceOn] = useState(false);
+  /** Set by Extend: the next video is recorded as made from this generation. */
+  const [continuesId, setContinuesId] = useState<string | null>(null);
   const promptRef = useRef<HTMLTextAreaElement>(null);
+  const enhancement = useEnhancement(prompt, mode, enhanceOn);
 
   // Fills requested by the detail drawer (Turn to video, Recreate, Extend). Never submits.
+  // Applied once and cleared, so it also reaches a bar that mounts after navigation.
   const barFill = useAppStore((s) => s.barFill);
-  const appliedFill = useRef(barFill?.nonce ?? 0);
+  const clearBarFill = useAppStore((s) => s.clearBarFill);
   useEffect(() => {
-    if (!barFill || barFill.nonce === appliedFill.current) return;
-    appliedFill.current = barFill.nonce;
+    if (!barFill) return;
+    clearBarFill(barFill.nonce);
     const { mode: nextMode, prompt: nextPrompt, modelId, aspect, quality, duration: nextDuration, startFrameId: frame } =
       barFill;
     setMode(nextMode);
     if (nextPrompt !== undefined) setPrompt(nextPrompt);
+    setContinuesId(barFill.parentId ?? null);
+    if (barFill.enhancedPrompt === null) setEnhanceOn(false);
+    if (barFill.enhancedPrompt) {
+      setEnhanceOn(true);
+      enhancement.load(barFill.enhancedPrompt, nextMode, nextPrompt ?? prompt);
+    }
     setSettings((all) => {
       const known = modelId && getModel(modelId)?.type === nextMode;
       const patch: Partial<ModeSettings> = {
@@ -118,7 +130,9 @@ export function GenerateBar({ projectId, generations }: { projectId: string; gen
     if (validDuration) setDuration(validDuration);
     if (frame !== undefined) setStartFrameId(frame);
     promptRef.current?.focus();
-  }, [barFill]);
+    // Only a new fill should run this; the other values are read as of that moment.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [barFill, clearBarFill]);
 
   const current = settings[mode];
   const isVideo = mode === "video";
@@ -131,6 +145,7 @@ export function GenerateBar({ projectId, generations }: { projectId: string; gen
   );
   // Derived, so a deleted start frame simply drops out.
   const startFrame = images.find((image) => image.id === startFrameId) ?? null;
+  const continues = isVideo ? (generations.find((g) => g.id === continuesId) ?? null) : null;
 
   const verdict = evaluate({ model, prompt, balance, mode, hasStartFrame: Boolean(startFrame) });
 
@@ -142,12 +157,21 @@ export function GenerateBar({ projectId, generations }: { projectId: string; gen
     if (!verdict.canSubmit || submitting || !model) return;
     setSubmitting(true);
     const cost = model.costPerGeneration;
+    let enhancedPrompt: string | null;
+    try {
+      enhancedPrompt = await enhancement.resolve();
+    } catch {
+      toast.error("Could not enhance the prompt. Try again, or turn Enhance off to send it as written.");
+      setSubmitting(false);
+      return;
+    }
     try {
       const result = await generate({
         projectId,
         type: mode,
         modelId: model.id,
         prompt: prompt.trim(),
+        enhancedPrompt,
         params: {
           aspect: current.aspect,
           quality: current.quality,
@@ -156,9 +180,10 @@ export function GenerateBar({ projectId, generations }: { projectId: string; gen
             ...(startFrame && { startFrameGenerationId: startFrame.id }),
           }),
         },
-        parentGenerationId: isVideo ? (startFrame?.id ?? null) : null,
+        parentGenerationId: isVideo ? (continues?.id ?? startFrame?.id ?? null) : null,
         onQueued: (_generation, startsInMs) => {
           setSubmitting(false);
+          setContinuesId(null);
           const reserved = `${formatCost(cost)} ${cost === 1 ? "credit" : "credits"} reserved.`;
           toast(startsInMs > 0 ? `Queued, starting in ${Math.ceil(startsInMs / 1000)}s. ${reserved}` : `Generating. ${reserved}`);
         },
@@ -190,7 +215,7 @@ export function GenerateBar({ projectId, generations }: { projectId: string; gen
       }}
     >
       {/* Mode toggle */}
-      <div role="radiogroup" aria-label="Mode" className="flex w-full shrink-0 flex-row gap-1 rounded-xl bg-bg p-1 sm:w-auto sm:flex-col">
+      <div role="radiogroup" aria-label="Mode" className="flex w-full shrink-0 flex-row gap-1 self-start rounded-xl bg-bg p-1 sm:w-auto sm:flex-col">
         <ModeButton active={!isVideo} onClick={() => setMode("image")} icon={<ImageIcon className="size-4" />}>
           Image
         </ModeButton>
@@ -241,20 +266,35 @@ export function GenerateBar({ projectId, generations }: { projectId: string; gen
               <Clapperboard className="size-3.5 text-text-muted" />
             </ChipButton>
           </ChipSlot>
-          <ChipSlot reason="Prompt enhancement is coming soon. Your prompt is sent exactly as written.">
-            <Toggle
-              size="sm"
-              disabled
-              pressed={false}
-              aria-label="Enhance prompt"
-              className="h-8 rounded-pill border border-line px-3 text-xs"
-            >
-              <Wand2 className="size-3.5" />
-              Enhance
-              <span className="text-text-muted">Off</span>
-            </Toggle>
-          </ChipSlot>
+          <Toggle
+            size="sm"
+            pressed={enhanceOn}
+            onPressedChange={setEnhanceOn}
+            aria-label="Enhance prompt"
+            title="Rewrite your prompt into a detailed paragraph before it is sent. You can read and edit it first."
+            className="h-8 rounded-pill border border-line px-3 text-xs data-[state=on]:border-text-muted"
+          >
+            <Wand2 className="size-3.5" />
+            Enhance
+            <span className={enhanceOn ? "font-medium text-text" : "text-text-muted"}>{enhanceOn ? "On" : "Off"}</span>
+          </Toggle>
+          {continues && (
+            <span className={cn(chipClass, "pr-1.5")} data-testid="continues-chip">
+              <FastForward className="size-3.5 text-text-muted" />
+              <span className="text-text-muted">Continues</span>
+              <span className="max-w-32 truncate font-medium">{continues.prompt}</span>
+              <button
+                type="button"
+                aria-label="Stop continuing this video"
+                onClick={() => setContinuesId(null)}
+                className="flex size-5 items-center justify-center rounded-pill text-text-muted hover:bg-line hover:text-text"
+              >
+                <X className="size-3" />
+              </button>
+            </span>
+          )}
         </div>
+        {enhanceOn && (prompt.trim() || enhancement.draft) && <EnhancedPromptBlock enhancement={enhancement} />}
       </div>
 
       {/* Generate */}

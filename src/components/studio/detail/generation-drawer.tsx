@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ArrowRight,
   Check,
   Copy,
   Download,
@@ -31,7 +32,7 @@ import { aspectRatio, getModel, getPreset, outputSize, PROVIDER_LABELS } from "@
 import { downloadOutput } from "@/lib/download";
 import { formatCost, formatDateTime } from "@/lib/format";
 import { useLive } from "@/lib/hooks/use-live";
-import { deleteGeneration, getGeneration, updateGeneration } from "@/lib/repo";
+import { deleteGeneration, getGeneration, getLineage, listChildren, updateGeneration } from "@/lib/repo";
 import { useAppStore, type BarFill } from "@/lib/store";
 import type { Generation, Project } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -40,6 +41,8 @@ import { refundLabel } from "../generation-tile";
 import { PreviewPlayer } from "./preview-player";
 
 const EXTEND_PREFIX = "Continue:";
+/** How far up Made from walks parentGenerationId. */
+const MAX_ANCESTORS = 5;
 
 /** Query param that holds the open generation, so /p/[projectId]?g=[id] links straight to it. */
 export const DETAIL_PARAM = "g";
@@ -48,19 +51,25 @@ export function detailHref(projectId: string, generationId: string) {
   return `/p/${projectId}?${DETAIL_PARAM}=${encodeURIComponent(generationId)}`;
 }
 
-/** Right-hand detail sheet for the generation named in the URL. */
-export function GenerationDrawer({ projectId, projects }: { projectId: string; projects: Project[] | undefined }) {
+/**
+ * Right-hand detail sheet for the generation named in ?g= on the current page.
+ * In the Studio, pass projectId so a generation from another project opens there;
+ * the Library leaves it out and shows any generation in place.
+ */
+export function GenerationDrawer({ projectId, projects }: { projectId?: string; projects: Project[] | undefined }) {
   const router = useRouter();
   const pathname = usePathname();
   const id = useSearchParams().get(DETAIL_PARAM);
-  // Wrapped so "still loading" (undefined) differs from "not found" (null).
-  const loaded = useLive(async () => ({ generation: id ? ((await getGeneration(id)) ?? null) : null }), [id]);
+  // Wrapped so "still loading" differs from "not found" (null). A result for an
+  // older id also counts as loading, so switching records never flashes "Not found".
+  const result = useLive(async () => ({ id, generation: id ? ((await getGeneration(id)) ?? null) : null }), [id]);
+  const loaded = result?.id === id ? result : undefined;
   const generation = loaded?.generation;
   const focusPromptOnClose = useRef(false);
 
   // A link to a generation in another project opens that project instead.
   useEffect(() => {
-    if (generation && generation.projectId !== projectId) {
+    if (projectId && generation && generation.projectId !== projectId) {
       router.replace(detailHref(generation.projectId, generation.id), { scroll: false });
     }
   }, [generation, projectId, router]);
@@ -69,8 +78,14 @@ export function GenerationDrawer({ projectId, projects }: { projectId: string; p
     router.replace(pathname, { scroll: false });
   }
 
+  /** Fills the generate bar of the generation's project, going there first if needed. */
   function fillBarAndClose(fill: BarFill) {
     useAppStore.getState().fillBar(fill);
+    const studio = generation ? `/p/${generation.projectId}` : null;
+    if (studio && pathname !== studio) {
+      router.push(studio);
+      return;
+    }
     focusPromptOnClose.current = true;
     close();
   }
@@ -106,7 +121,7 @@ export function GenerationDrawer({ projectId, projects }: { projectId: string; p
             key={loaded.generation.id}
             generation={loaded.generation}
             project={projects?.find((p) => p.id === loaded.generation?.projectId)}
-            onOpen={(other) => router.push(detailHref(projectId, other), { scroll: false })}
+            onOpen={(other) => router.push(`${pathname}?${DETAIL_PARAM}=${encodeURIComponent(other)}`, { scroll: false })}
             onFill={fillBarAndClose}
             onDeleted={close}
           />
@@ -156,6 +171,7 @@ function Details({
     onFill({
       mode: generation.type,
       prompt: generation.prompt,
+      enhancedPrompt: generation.enhancedPrompt,
       ...shared,
       ...(isVideo && { startFrameId: params.startFrameGenerationId ?? null }),
     });
@@ -166,6 +182,8 @@ function Details({
       ...shared,
       prompt: `${EXTEND_PREFIX} ${generation.prompt.replace(/^Continue:\s*/i, "")}`,
       startFrameId: params.startFrameGenerationId ?? null,
+      // The new video continues this one, so lineage reads image → video → extension.
+      parentId: generation.id,
     });
 
   const size = outputSize(generation.type, params.aspect, params.quality);
@@ -229,7 +247,12 @@ function Details({
 
         <section aria-labelledby="made-from-heading">
           <SectionHeading id="made-from-heading">Made from</SectionHeading>
-          <MadeFrom parentId={generation.parentGenerationId} onOpen={onOpen} />
+          <Lineage generation={generation} onOpen={onOpen} />
+        </section>
+
+        <section aria-labelledby="used-in-heading">
+          <SectionHeading id="used-in-heading">Used in</SectionHeading>
+          <UsedIn generationId={generation.id} onOpen={onOpen} />
         </section>
       </div>
 
@@ -400,32 +423,138 @@ function PromptBlock({ label, text }: { label: string; text: string }) {
   );
 }
 
-function MadeFrom({ parentId, onOpen }: { parentId: string | null; onOpen: (generationId: string) => void }) {
-  const parent = useLive(async () => (parentId ? ((await getGeneration(parentId)) ?? null) : null), [parentId]);
+/** Ancestors up to MAX_ANCESTORS levels, root first, ending with this generation. */
+function Lineage({ generation, onOpen }: { generation: Generation; onOpen: (generationId: string) => void }) {
+  const chain = useLive(
+    () => getLineage(generation.id, MAX_ANCESTORS),
+    [generation.id, generation.parentGenerationId],
+  );
 
-  if (!parentId) return <p className="rounded-card bg-bg p-4 text-sm text-text-muted">Original generation</p>;
-  if (parent === undefined) return <Skeleton className="h-[72px] w-full rounded-card" />;
-  if (parent === null) return <p className="rounded-card bg-bg p-4 text-sm text-text-muted">The source was deleted</p>;
+  if (!generation.parentGenerationId) {
+    return <p className="rounded-card bg-bg p-4 text-sm text-text-muted">Original generation</p>;
+  }
+  if (chain === undefined) return <Skeleton className="h-[104px] w-full rounded-card" />;
 
-  const thumb = parent.thumbnailUrl ?? parent.outputUrl;
+  const root = chain[0];
+  const capped = chain.length > MAX_ANCESTORS;
+  // The walk stopped early with a parent still named: that parent was deleted.
+  const brokenAbove = Boolean(root?.parentGenerationId) && !capped;
+  const hiddenAbove = Boolean(root?.parentGenerationId) && capped;
+
+  return (
+    <ol className="flex items-start gap-1 overflow-x-auto rounded-card bg-bg p-3" aria-label="Lineage, oldest first">
+      {(brokenAbove || hiddenAbove) && (
+        <li className="flex items-start gap-1">
+          <div className="flex w-16 flex-col items-center gap-1.5 text-center">
+            <span className="flex size-14 items-center justify-center rounded-lg border border-dashed border-line text-xs text-text-muted">
+              {hiddenAbove ? "…" : "?"}
+            </span>
+            <span className="text-[11px] leading-tight text-text-muted">{hiddenAbove ? "Earlier" : "Deleted"}</span>
+          </div>
+          <Arrow />
+        </li>
+      )}
+      {chain.map((node, index) => {
+        const isSelf = node.id === generation.id;
+        return (
+          <li key={node.id} className="flex items-start gap-1">
+            <LineageNode generation={node} current={isSelf} onOpen={onOpen} />
+            {index < chain.length - 1 && <Arrow />}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function Arrow() {
+  return <ArrowRight className="mt-5 size-4 shrink-0 text-text-muted" aria-hidden />;
+}
+
+function LineageNode({
+  generation,
+  current,
+  onOpen,
+}: {
+  generation: Generation;
+  current: boolean;
+  onOpen: (generationId: string) => void;
+}) {
+  const thumb = generation.thumbnailUrl ?? generation.outputUrl;
+  const label = generation.type === "video" ? "Video" : "Image";
+  const content = (
+    <>
+      <span
+        className={cn(
+          "relative block size-14 overflow-hidden rounded-lg border bg-panel",
+          current ? "border-text" : "border-line",
+        )}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        {thumb && <img src={thumb} alt="" className="size-full object-cover" />}
+        {generation.type === "video" && (
+          <Video className="absolute bottom-1 right-1 size-3.5 text-white drop-shadow" aria-hidden />
+        )}
+      </span>
+      <span className={cn("text-[11px] leading-tight", current ? "font-medium text-text" : "text-text-muted")}>
+        {current ? `This ${label.toLowerCase()}` : label}
+      </span>
+    </>
+  );
+  if (current) {
+    return (
+      <div className="flex w-16 flex-col items-center gap-1.5 text-center" aria-current="true">
+        {content}
+      </div>
+    );
+  }
   return (
     <button
       type="button"
-      onClick={() => onOpen(parent.id)}
-      className="flex w-full items-center gap-3 rounded-card bg-bg p-2 pr-4 text-left transition-colors hover:bg-[#1c1c1f] focus-visible:outline-2 focus-visible:outline-text"
+      onClick={() => onOpen(generation.id)}
+      title={generation.prompt}
+      className="flex w-16 flex-col items-center gap-1.5 rounded-lg text-center hover:[&>span:first-child]:border-text-muted focus-visible:outline-2 focus-visible:outline-text"
     >
-      <span className="size-14 shrink-0 overflow-hidden rounded-lg border border-line bg-panel">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        {thumb && <img src={thumb} alt="" className="size-full object-cover" />}
-      </span>
-      <span className="min-w-0">
-        <span className="flex items-center gap-1.5 text-sm font-medium">
-          {parent.type === "video" ? <Video className="size-3.5" /> : <ImageIcon className="size-3.5" />}
-          {parent.type === "video" ? "Video" : "Image"}
-        </span>
-        <span className="mt-0.5 block truncate text-xs text-text-muted">{parent.prompt}</span>
-      </span>
+      {content}
     </button>
+  );
+}
+
+/** Generations whose parent is this one. */
+function UsedIn({ generationId, onOpen }: { generationId: string; onOpen: (generationId: string) => void }) {
+  const children = useLive(() => listChildren(generationId), [generationId]);
+
+  if (children === undefined) return <Skeleton className="h-[72px] w-full rounded-card" />;
+  if (children.length === 0) {
+    return <p className="rounded-card bg-bg p-4 text-sm text-text-muted">Not used in anything yet</p>;
+  }
+  return (
+    <ul className="space-y-1 rounded-card bg-bg p-2">
+      {children.map((child) => {
+        const thumb = child.thumbnailUrl ?? child.outputUrl;
+        return (
+          <li key={child.id}>
+            <button
+              type="button"
+              onClick={() => onOpen(child.id)}
+              className="flex w-full items-center gap-3 rounded-lg p-1.5 text-left transition-colors hover:bg-[#1c1c1f] focus-visible:outline-2 focus-visible:outline-text"
+            >
+              <span className="size-10 shrink-0 overflow-hidden rounded-md border border-line bg-panel">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                {thumb && <img src={thumb} alt="" className="size-full object-cover" />}
+              </span>
+              <span className="min-w-0">
+                <span className="flex items-center gap-1.5 text-sm font-medium">
+                  {child.type === "video" ? <Video className="size-3.5" /> : <ImageIcon className="size-3.5" />}
+                  {child.type === "video" ? "Video" : "Image"}
+                </span>
+                <span className="block truncate text-xs text-text-muted">{child.prompt}</span>
+              </span>
+            </button>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

@@ -36,6 +36,8 @@ export interface GenerateRequest {
   type: GenerationType;
   modelId: string;
   prompt: string;
+  /** When set, this is what the provider receives; prompt stays as the user wrote it. */
+  enhancedPrompt?: string | null;
   params?: GenerationParams;
   parentGenerationId?: string | null;
   /**
@@ -91,6 +93,7 @@ export async function generate(request: GenerateRequest): Promise<Generation> {
     projectId: request.projectId,
     type: request.type,
     prompt: request.prompt,
+    enhancedPrompt: request.enhancedPrompt?.trim() || null,
     modelId: model.id,
     params,
     cost,
@@ -117,7 +120,7 @@ export async function generate(request: GenerateRequest): Promise<Generation> {
         generationId: generation.id,
         type: generation.type,
         modelId: generation.modelId,
-        prompt: generation.prompt,
+        prompt: generation.enhancedPrompt ?? generation.prompt,
         params,
         startFrameUrl: startFrame?.outputUrl ?? undefined,
       }),
@@ -226,4 +229,22 @@ async function fail(id: string, reason: string): Promise<Generation> {
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export interface Enhancement {
+  enhancedPrompt: string;
+  source: "gemini" | "template";
+}
+
+/** Asks the server to expand a prompt into one detailed paragraph. */
+export async function enhancePrompt(prompt: string, type: GenerationType, signal?: AbortSignal): Promise<Enhancement> {
+  const response = await fetch("/api/enhance", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt, type }),
+    signal,
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.error ?? `Enhance failed (${response.status})`);
+  return body as Enhancement;
 }

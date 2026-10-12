@@ -23,7 +23,17 @@ import { GENERATION_DRAG_TYPE } from "./drag";
 const ROW_HEIGHT = 240;
 const IMAGE_RATIO = 3 / 4;
 
-export function GenerationTile({ generation }: { generation: Generation }) {
+export function GenerationTile({
+  generation,
+  href,
+  projectName,
+}: {
+  generation: Generation;
+  /** Where clicking opens the drawer. Defaults to the generation's project in the Studio. */
+  href?: string;
+  /** Shown as a small label (the Library mixes projects). */
+  projectName?: string;
+}) {
   const [menuOpen, setMenuOpen] = useState(false);
   const model = getModel(generation.modelId);
   const preset = generation.params.presetId ? getPreset(generation.params.presetId) : undefined;
@@ -63,7 +73,7 @@ export function GenerationTile({ generation }: { generation: Generation }) {
 
       {/* Covers the tile under the hover actions; opens the detail drawer. */}
       <Link
-        href={detailHref(generation.projectId, generation.id)}
+        href={href ?? detailHref(generation.projectId, generation.id)}
         scroll={false}
         draggable={false}
         aria-label={`Open details: ${generation.prompt}`}
@@ -127,6 +137,12 @@ export function GenerationTile({ generation }: { generation: Generation }) {
       {/* Favourite stays visible without hover so it reads at a glance. */}
       {generation.favourite && !menuOpen && (
         <Heart className="pointer-events-none absolute right-2 top-2 size-4 fill-text text-text drop-shadow transition-opacity group-hover:opacity-0 group-focus-within:opacity-0" />
+      )}
+
+      {projectName && (
+        <span className="pointer-events-none absolute bottom-2 left-2 max-w-[calc(100%-1rem)] truncate rounded-pill bg-black/60 px-2 py-0.5 text-[11px] text-text backdrop-blur transition-opacity group-hover:opacity-0">
+          {projectName}
+        </span>
       )}
 
       <figcaption className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent p-3 pt-8 opacity-0 transition-opacity group-hover:opacity-100">

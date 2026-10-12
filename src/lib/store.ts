@@ -16,6 +16,10 @@ export interface BarFill {
   duration?: number;
   /** null clears the slot. */
   startFrameId?: string | null;
+  /** Records the next generation as made from this one (Extend), instead of from the start frame. */
+  parentId?: string | null;
+  /** Turns Enhance on with this text already written (Recreate of an enhanced record). */
+  enhancedPrompt?: string | null;
 }
 
 interface AppState {
@@ -27,12 +31,16 @@ interface AppState {
   setReady: () => void;
   setBootError: (message: string) => void;
   setCapabilities: (capabilities: Capabilities) => void;
-  /** Latest fill request; the nonce makes a repeat of the same fill still apply. */
+  /**
+   * Pending fill request. The generate bar applies it and clears it, so a bar that
+   * mounts later (after navigating from the Library) still picks it up.
+   */
   barFill: (BarFill & { nonce: number }) | null;
+  fillBar: (fill: BarFill) => void;
+  clearBarFill: (nonce: number) => void;
   /** Generations waiting for a rate-limit slot, with the time they will start. Not persisted. */
   queuedUntil: Record<string, number>;
   setQueuedUntil: (generationId: string, startAt: number | null) => void;
-  fillBar: (fill: BarFill) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -52,4 +60,5 @@ export const useAppStore = create<AppState>((set) => ({
       return { queuedUntil: next };
     }),
   fillBar: (fill) => set((s) => ({ barFill: { ...fill, nonce: (s.barFill?.nonce ?? 0) + 1 } })),
+  clearBarFill: (nonce) => set((s) => (s.barFill?.nonce === nonce ? { barFill: null } : {})),
 }));
