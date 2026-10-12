@@ -1,8 +1,10 @@
 import "server-only";
 import type { ModelDef } from "@/lib/catalog";
 import type { Capabilities, GenerationType } from "@/lib/types";
+import { falProvider } from "./fal";
 import { geminiProvider } from "./gemini";
 import { mockProvider } from "./mock";
+import { motionProvider } from "./motion";
 import { pollinationsProvider } from "./pollinations";
 import type { GenerationProvider } from "./types";
 
@@ -10,14 +12,17 @@ const PROVIDERS: Record<string, GenerationProvider> = {
   [mockProvider.name]: mockProvider,
   [pollinationsProvider.name]: pollinationsProvider,
   [geminiProvider.name]: geminiProvider,
+  [motionProvider.name]: motionProvider,
+  [falProvider.name]: falProvider,
 };
 
 export class ProviderUnavailableError extends Error {}
 
 /**
  * "mock" (the default) routes every model of that type to the mock. Any other value
- * ("pollinations" for images, or "live") sends each model to its own provider, so
- * Soul 2 and FLUX go to Pollinations and Nano Banana to Gemini.
+ * ("pollinations" for images, "live" for either) sends each model to its own
+ * provider: Soul 2 and FLUX to Pollinations, Nano Banana to Gemini, motion previews
+ * to the motion provider and Seedance to fal.
  */
 function modeFor(type: GenerationType): "mock" | "live" {
   const value =

@@ -18,6 +18,8 @@ export interface BarFill {
   startFrameId?: string | null;
   /** Records the next generation as made from this one (Extend), instead of from the start frame. */
   parentId?: string | null;
+  /** Camera preset for motion previews. */
+  presetId?: string;
   /** Turns Enhance on with this text already written (Recreate of an enhanced record). */
   enhancedPrompt?: string | null;
 }

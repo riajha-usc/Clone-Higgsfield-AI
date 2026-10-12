@@ -11,6 +11,7 @@ import {
   Loader2,
   RotateCcw,
   Trash2,
+  UserPlus,
   Video,
 } from "lucide-react";
 import Link from "next/link";
@@ -39,6 +40,7 @@ import type { Generation, Project } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { PROMPT_INPUT_ID } from "../generate-bar/generate-bar";
 import { refundLabel } from "../generation-tile";
+import { ElementDialog } from "@/components/elements/element-dialog";
 import { PreviewPlayer } from "./preview-player";
 
 const EXTEND_PREFIX = "Continue:";
@@ -148,6 +150,7 @@ function Details({
   onDeleted: () => void;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [savingElement, setSavingElement] = useState(false);
   const isVideo = generation.type === "video";
   const done = generation.status === "succeeded" && Boolean(generation.outputUrl);
   const pending = generation.status === "queued" || generation.status === "running";
@@ -179,6 +182,7 @@ function Details({
       mode: generation.type,
       prompt: generation.prompt,
       enhancedPrompt: generation.enhancedPrompt,
+      presetId: params.presetId,
       ...shared,
       ...(isVideo && { startFrameId: params.startFrameGenerationId ?? null }),
     });
@@ -329,7 +333,26 @@ function Details({
             <Trash2 />
           </Button>
         </div>
+        {!isVideo && done && (
+          <Button variant="ghost" size="sm" className="w-full text-text-muted" onClick={() => setSavingElement(true)}>
+            <UserPlus />
+            Save as character
+          </Button>
+        )}
       </footer>
+
+      {!isVideo && done && (
+        <ElementDialog
+          open={savingElement}
+          onOpenChange={setSavingElement}
+          draft={{
+            type: "character",
+            imageGenerationId: generation.id,
+            imageUrl: generation.outputUrl!,
+            description: generation.prompt,
+          }}
+        />
+      )}
 
       <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <DialogContent>

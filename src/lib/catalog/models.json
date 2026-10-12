@@ -59,7 +59,7 @@
   },
   {
     "id": "seedance-1-5",
-    "displayName": "Seedance 1.5",
+    "displayName": "Seedance 1.5 Pro",
     "type": "video",
     "provider": "fal",
     "costPerGeneration": 5,
@@ -70,6 +70,6 @@
       "duration": 5
     },
     "sortOrder": 50,
-    "needsStartFrame": false
+    "needsStartFrame": true
   }
 ]

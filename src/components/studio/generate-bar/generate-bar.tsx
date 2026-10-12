@@ -1,21 +1,24 @@
 "use client";
 
-import { Clapperboard, FastForward, Image as ImageIcon, Sparkles, Video, Wand2, X } from "lucide-react";
+import { FastForward, Image as ImageIcon, Sparkles, Video, Wand2, X } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { Toggle } from "@/components/ui/toggle";
 import { ASPECTS, DURATIONS, getModel, listModels, QUALITIES, type Model } from "@/lib/catalog";
 import { formatBalance, formatCost } from "@/lib/format";
 import { generate, InsufficientCreditsError } from "@/lib/generate";
 import { useLive } from "@/lib/hooks/use-live";
-import { getBalance } from "@/lib/repo";
+import { expandMentions, mentionAtCaret, mentionedElements } from "@/lib/mentions";
+import { getBalance, listElementsWithImages } from "@/lib/repo";
 import { useAppStore } from "@/lib/store";
 import type { Generation, GenerationType } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { ChipButton, chipClass, ChipSlot, OptionChip } from "./chip";
+import { chipClass, OptionChip } from "./chip";
 import { EnhancedPromptBlock, useEnhancement } from "./enhanced-prompt";
+import { PresetChip } from "./preset-chip";
 import { ModelChip } from "./model-chip";
 import { StartFrameChip } from "./start-frame-chip";
 
@@ -93,12 +96,29 @@ export function GenerateBar({ projectId, generations }: { projectId: string; gen
   const [settings, setSettings] = useState(INITIAL_SETTINGS);
   const [duration, setDuration] = useState<(typeof DURATIONS)[number]>(5);
   const [startFrameId, setStartFrameId] = useState<string | null>(null);
+  /** Start frame from an element's image, set by picking an @mention in Video mode. */
+  const [startFrameElementId, setStartFrameElementId] = useState<string | null>(null);
+  const [mention, setMention] = useState<{ start: number; query: string } | null>(null);
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const elementItems = useLive(() => listElementsWithImages(), []);
+  const elements = useMemo(() => elementItems?.map((i) => i.element) ?? [], [elementItems]);
+  // What the model receives: each @name replaced by that element's description.
+  const promptForModel = useMemo(() => expandMentions(prompt, elements), [prompt, elements]);
   const [submitting, setSubmitting] = useState(false);
   const [enhanceOn, setEnhanceOn] = useState(false);
+  const [presetId, setPresetId] = useState("push-in");
   /** Set by Extend: the next video is recorded as made from this generation. */
   const [continuesId, setContinuesId] = useState<string | null>(null);
   const promptRef = useRef<HTMLTextAreaElement>(null);
-  const enhancement = useEnhancement(prompt, mode, enhanceOn);
+  /** Caret to restore after a programmatic prompt change (picking an @mention). */
+  const pendingCaret = useRef<number | null>(null);
+  // Before paint and before the next keystroke, so fast typing lands after the mention.
+  useLayoutEffect(() => {
+    if (pendingCaret.current === null || !promptRef.current) return;
+    promptRef.current.setSelectionRange(pendingCaret.current, pendingCaret.current);
+    pendingCaret.current = null;
+  }, [prompt]);
+  const enhancement = useEnhancement(promptForModel, mode, enhanceOn);
 
   // Fills requested by the detail drawer (Turn to video, Recreate, Extend). Never submits.
   // Applied once and cleared, so it also reaches a bar that mounts after navigation.
@@ -112,6 +132,7 @@ export function GenerateBar({ projectId, generations }: { projectId: string; gen
     setMode(nextMode);
     if (nextPrompt !== undefined) setPrompt(nextPrompt);
     setContinuesId(barFill.parentId ?? null);
+    if (barFill.presetId) setPresetId(barFill.presetId);
     if (barFill.enhancedPrompt === null) setEnhanceOn(false);
     if (barFill.enhancedPrompt) {
       setEnhanceOn(true);
@@ -128,7 +149,10 @@ export function GenerateBar({ projectId, generations }: { projectId: string; gen
     });
     const validDuration = DURATIONS.find((d) => d === nextDuration);
     if (validDuration) setDuration(validDuration);
-    if (frame !== undefined) setStartFrameId(frame);
+    if (frame !== undefined) {
+      setStartFrameId(frame);
+      setStartFrameElementId(null);
+    }
     promptRef.current?.focus();
     // Only a new fill should run this; the other values are read as of that moment.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -145,9 +169,44 @@ export function GenerateBar({ projectId, generations }: { projectId: string; gen
   );
   // Derived, so a deleted start frame simply drops out.
   const startFrame = images.find((image) => image.id === startFrameId) ?? null;
+  const startFrameElement =
+    (!startFrame && elementItems?.find((i) => i.element.id === startFrameElementId && i.imageUrl)) || null;
+  const startFrameValue = startFrame
+    ? { id: startFrame.id, url: startFrame.outputUrl! }
+    : startFrameElement
+      ? { id: startFrameElement.element.id, url: startFrameElement.imageUrl!, label: `@${startFrameElement.element.name}` }
+      : null;
+  const mentionOptions =
+    mention && elementItems
+      ? elementItems.filter((i) => i.element.name.toLowerCase().startsWith(mention.query.toLowerCase())).slice(0, 8)
+      : [];
+  const mentioned = mentionedElements(prompt, elements);
   const continues = isVideo ? (generations.find((g) => g.id === continuesId) ?? null) : null;
 
-  const verdict = evaluate({ model, prompt, balance, mode, hasStartFrame: Boolean(startFrame) });
+  const verdict = evaluate({ model, prompt, balance, mode, hasStartFrame: Boolean(startFrameValue) });
+
+  function trackMention(text: string, caret: number | null) {
+    const next = caret === null ? null : mentionAtCaret(text, caret);
+    setMention(next);
+    if (next?.query !== mention?.query) setMentionIndex(0);
+  }
+
+  /** Puts @name at the caret; in Video mode, the element's image also fills an empty Start frame. */
+  function pickMention(item: { element: (typeof elements)[number]; imageUrl: string | null }) {
+    if (!mention) return;
+    const caret = promptRef.current?.selectionStart ?? prompt.length;
+    const insert = `@${item.element.name} `;
+    setPrompt(prompt.slice(0, mention.start) + insert + prompt.slice(caret));
+    setMention(null);
+    pendingCaret.current = mention.start + insert.length;
+    promptRef.current?.focus();
+    if (isVideo && !startFrameValue && item.imageUrl) {
+      const own = item.element.imageGenerationId && images.some((g) => g.id === item.element.imageGenerationId);
+      if (own) setStartFrameId(item.element.imageGenerationId);
+      else setStartFrameElementId(item.element.id);
+      toast(`@${item.element.name} is now the start frame.`);
+    }
+  }
 
   function update(patch: Partial<ModeSettings>) {
     setSettings((all) => ({ ...all, [mode]: { ...all[mode], ...patch } }));
@@ -159,7 +218,9 @@ export function GenerateBar({ projectId, generations }: { projectId: string; gen
     const cost = model.costPerGeneration;
     let enhancedPrompt: string | null;
     try {
-      enhancedPrompt = await enhancement.resolve();
+      // Enhanced text is already written from the expanded prompt; otherwise send the expansion itself.
+      enhancedPrompt =
+        (await enhancement.resolve()) ?? (promptForModel.trim() !== prompt.trim() ? promptForModel.trim() : null);
     } catch {
       // useEnhancement already told the person what went wrong.
       setSubmitting(false);
@@ -178,9 +239,13 @@ export function GenerateBar({ projectId, generations }: { projectId: string; gen
           ...(isVideo && {
             duration,
             ...(startFrame && { startFrameGenerationId: startFrame.id }),
+            ...(startFrameElement && { startFrameElementId: startFrameElement.element.id }),
+            ...(model.provider === "motion" && { presetId }),
           }),
         },
-        parentGenerationId: isVideo ? (continues?.id ?? startFrame?.id ?? null) : null,
+        parentGenerationId: isVideo
+          ? (continues?.id ?? startFrame?.id ?? startFrameElement?.element.imageGenerationId ?? null)
+          : null,
         onQueued: (_generation, startsInMs) => {
           setSubmitting(false);
           setContinuesId(null);
@@ -226,17 +291,104 @@ export function GenerateBar({ projectId, generations }: { projectId: string; gen
 
       {/* Prompt and chips */}
       <div className="flex min-w-0 flex-1 basis-80 flex-col gap-2">
-        <Textarea
-          ref={promptRef}
-          id={PROMPT_INPUT_ID}
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          placeholder="Describe what you want to make"
-          aria-label="Prompt"
-          maxLength={2000}
-          rows={2}
-          className="min-h-16 resize-none border-0 bg-transparent px-1 text-sm shadow-none focus-visible:ring-0 dark:bg-transparent"
-        />
+        <Popover open={mention !== null} onOpenChange={(open) => !open && setMention(null)}>
+          <PopoverAnchor asChild>
+            <Textarea
+              ref={promptRef}
+              id={PROMPT_INPUT_ID}
+              value={prompt}
+              onChange={(e) => {
+                setPrompt(e.target.value);
+                trackMention(e.target.value, e.target.selectionStart);
+              }}
+              onSelect={(e) => trackMention(e.currentTarget.value, e.currentTarget.selectionStart)}
+              onKeyDown={(e) => {
+                if (!mention) return;
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  setMention(null);
+                  return;
+                }
+                if (mentionOptions.length === 0) return;
+                if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                  e.preventDefault();
+                  const step = e.key === "ArrowDown" ? 1 : -1;
+                  setMentionIndex((i) => (i + step + mentionOptions.length) % mentionOptions.length);
+                } else if ((e.key === "Enter" && !e.metaKey && !e.ctrlKey) || e.key === "Tab") {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  pickMention(mentionOptions[Math.min(mentionIndex, mentionOptions.length - 1)]);
+                }
+              }}
+              placeholder="Describe what you want to make. Type @ to add a character or location."
+              aria-label="Prompt"
+              aria-autocomplete="list"
+              aria-controls={mention ? "mention-list" : undefined}
+              aria-activedescendant={mention && mentionOptions.length ? `mention-${mentionIndex}` : undefined}
+              aria-describedby={mentioned.length ? "mention-note" : undefined}
+              maxLength={2000}
+              rows={2}
+              className="min-h-16 resize-none border-0 bg-transparent px-1 text-sm shadow-none focus-visible:ring-0 dark:bg-transparent"
+            />
+          </PopoverAnchor>
+          <PopoverContent
+            side="top"
+            align="start"
+            className="w-72 p-1"
+            aria-label="Elements"
+            onOpenAutoFocus={(e) => e.preventDefault()}
+            onCloseAutoFocus={(e) => e.preventDefault()}
+          >
+            {mentionOptions.length === 0 ? (
+              <p className="p-2 text-xs text-text-muted">
+                {elements.length === 0 ? (
+                  <>
+                    No elements yet. Save an image as a character from its details, or{" "}
+                    <Link href="/elements" className="underline underline-offset-2 hover:text-text">
+                      create one
+                    </Link>
+                    .
+                  </>
+                ) : (
+                  `No element starts with "${mention?.query}".`
+                )}
+              </p>
+            ) : (
+              <ul id="mention-list" role="listbox" aria-label="Elements">
+                {mentionOptions.map((item, index) => (
+                  <li
+                    key={item.element.id}
+                    id={`mention-${index}`}
+                    role="option"
+                    aria-selected={index === mentionIndex}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => pickMention(item)}
+                    onMouseEnter={() => setMentionIndex(index)}
+                    className={cn(
+                      "flex cursor-pointer items-center gap-2 rounded-md p-1.5 text-sm",
+                      index === mentionIndex && "bg-accent",
+                    )}
+                  >
+                    <span className="size-8 shrink-0 overflow-hidden rounded-md border border-line bg-bg">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      {item.imageUrl && <img src={item.imageUrl} alt="" className="size-full object-cover" />}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium">@{item.element.name}</span>
+                      <span className="block text-xs capitalize text-text-muted">{item.element.type}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </PopoverContent>
+        </Popover>
+        {mentioned.length > 0 && !enhanceOn && (
+          <p id="mention-note" className="px-1 text-[11px] text-text-muted">
+            {mentioned.map((e) => `@${e.name}`).join(", ")} {mentioned.length === 1 ? "is" : "are"} sent as{" "}
+            {mentioned.length === 1 ? "its" : "their"} saved description.
+          </p>
+        )}
         {/* Fixed order in both modes: video-only chips disable rather than disappear. */}
         <div className="flex flex-wrap items-center gap-1.5" data-testid="chips">
           <ModelChip models={models} value={current.modelId} onChange={(modelId) => update({ modelId })} />
@@ -257,15 +409,21 @@ export function GenerateBar({ projectId, generations }: { projectId: string; gen
           />
           <StartFrameChip
             images={images}
-            value={startFrame}
-            onChange={setStartFrameId}
+            value={startFrameValue}
+            onChange={(id) => {
+              setStartFrameId(id);
+              setStartFrameElementId(null);
+            }}
             disabledReason={isVideo ? undefined : VIDEO_ONLY}
           />
-          <ChipSlot reason={isVideo ? "Camera presets are coming soon" : VIDEO_ONLY}>
-            <ChipButton label="Presets" disabled>
-              <Clapperboard className="size-3.5 text-text-muted" />
-            </ChipButton>
-          </ChipSlot>
+          <PresetChip
+            value={presetId}
+            onChange={setPresetId}
+            frameUrl={startFrameValue?.url ?? null}
+            disabledReason={
+              !isVideo ? VIDEO_ONLY : model?.provider !== "motion" ? "Camera moves apply to motion previews" : undefined
+            }
+          />
           <Toggle
             size="sm"
             pressed={enhanceOn}

@@ -38,6 +38,26 @@ export interface GenerationParams {
   seed?: number;
   presetId?: string;
   startFrameGenerationId?: string;
+  /** Start frame taken from an element's image (an upload or a generation in another project). */
+  startFrameElementId?: string;
+}
+
+export type ElementType = "character" | "location";
+
+/**
+ * A reusable subject. Mentioned as @name in a prompt, which is replaced by its
+ * description in what the provider receives. Its image is either a generation
+ * or an uploaded file stored as a data URL.
+ */
+export interface Element {
+  id: string;
+  type: ElementType;
+  /** Letters, digits, - and _ only, so @name is one token. Unique, ignoring case. */
+  name: string;
+  description: string;
+  imageGenerationId: string | null;
+  imageDataUrl: string | null;
+  createdAt: number;
 }
 
 export interface Generation {

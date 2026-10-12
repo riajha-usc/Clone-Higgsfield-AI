@@ -17,7 +17,8 @@ export function StartFrameChip({
 }: {
   /** Finished images in this project, newest first. */
   images: Generation[];
-  value: Generation | null;
+  /** The chosen frame: a generation in this project, or an element's image (label "@name"). */
+  value: { id: string; url: string; label?: string } | null;
   onChange: (generationId: string | null) => void;
   disabledReason?: string;
 }) {
@@ -53,16 +54,16 @@ export function StartFrameChip({
             <button
               type="button"
               disabled={disabled}
-              aria-label={value ? "Change start frame" : "Choose start frame"}
+              aria-label={value ? `Change start frame${value.label ? ` (${value.label})` : ""}` : "Choose start frame"}
               className={cn(chipClass, value && "pl-1", value && "pr-8", dragOver && "border-lime bg-lime/10")}
             >
-              {value?.outputUrl ? (
+              {value?.url ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={value.outputUrl} alt="" className="size-6 rounded-pill object-cover" />
+                <img src={value.url} alt="" className="size-6 rounded-pill object-cover" />
               ) : (
                 <ImagePlus className="size-3.5 text-text-muted" />
               )}
-              <span className={value ? "font-medium" : "text-text-muted"}>Start frame</span>
+              <span className={value ? "font-medium" : "text-text-muted"}>{value?.label ?? "Start frame"}</span>
             </button>
           </PopoverTrigger>
           <PopoverContent align="start" className="w-80">

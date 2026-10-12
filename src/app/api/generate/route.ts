@@ -21,7 +21,7 @@ function parseParams(raw: unknown): GenerationParams | null {
   if (typeof raw !== "object" || Array.isArray(raw)) return null;
   const input = raw as Record<string, unknown>;
   const params: GenerationParams = {};
-  for (const key of ["aspect", "quality", "presetId", "startFrameGenerationId"] as const) {
+  for (const key of ["aspect", "quality", "presetId", "startFrameGenerationId", "startFrameElementId"] as const) {
     const value = input[key];
     if (value === undefined) continue;
     if (typeof value !== "string" || value.length > 100) return null;
@@ -85,7 +85,8 @@ export async function POST(request: Request) {
       modelId: model.id,
       prompt: prompt.trim(),
       params,
-      startFrameUrl,
+      // Providers such as fal fetch the frame themselves, so bundled samples need a full URL.
+      startFrameUrl: startFrameUrl?.startsWith("/") ? new URL(startFrameUrl, request.url).href : startFrameUrl,
     });
     return NextResponse.json({ providerJobId: jobId, provider: provider.name, state: state ?? null });
   } catch (error) {

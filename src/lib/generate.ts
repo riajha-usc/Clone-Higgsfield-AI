@@ -8,6 +8,8 @@ import type { JobState } from "@/lib/providers/types";
 import {
   addLedgerEntry,
   createGeneration,
+  elementImageUrl,
+  getElement,
   getBalance,
   getGeneration,
   listGenerations,
@@ -103,13 +105,11 @@ export async function generate(request: GenerateRequest): Promise<Generation> {
   const params = { ...model.defaultParams, ...request.params };
   // Stored with the record so the same image can be reproduced later.
   if (model.type === "image" && params.seed === undefined) params.seed = Math.floor(Math.random() * 1_000_000);
-  const startFrame = params.startFrameGenerationId
-    ? await getGeneration(params.startFrameGenerationId)
-    : undefined;
-  if (params.startFrameGenerationId && !startFrame?.outputUrl) {
+  const startFrameUrl = await startFrameUrlFor(params);
+  if ((params.startFrameGenerationId || params.startFrameElementId) && !startFrameUrl) {
     throw new Error("The start frame was deleted or hasn't finished. Choose another one.");
   }
-  if (model.type === "video" && model.needsStartFrame && !startFrame) {
+  if (model.type === "video" && model.needsStartFrame && !startFrameUrl) {
     throw new Error(`${model.displayName} needs a start frame. Add an image first.`);
   }
   const generation = await createGeneration({
@@ -145,7 +145,7 @@ export async function generate(request: GenerateRequest): Promise<Generation> {
         modelId: generation.modelId,
         prompt: generation.enhancedPrompt ?? generation.prompt,
         params,
-        startFrameUrl: startFrame?.outputUrl ?? undefined,
+        startFrameUrl: startFrameUrl ?? undefined,
       }),
     });
     const body = await response.json().catch(() => ({}));
@@ -222,18 +222,29 @@ async function pollUntilDone(id: string, provider: string, jobId: string): Promi
   return fail(id, "The provider took more than 10 minutes, so it was stopped");
 }
 
+/** The start frame's image: a generation's output or an element's image. */
+async function startFrameUrlFor(params: GenerationParams): Promise<string | null> {
+  if (params.startFrameGenerationId) return (await getGeneration(params.startFrameGenerationId))?.outputUrl ?? null;
+  if (params.startFrameElementId) {
+    const element = await getElement(params.startFrameElementId);
+    return element ? elementImageUrl(element) : null;
+  }
+  return null;
+}
+
 async function succeed(id: string, providerUrl: string): Promise<Generation> {
   const current = await getGeneration(id);
   if (!current) throw new Error(`Generation ${id} disappeared`);
   // A motion preview's artifact is its start frame; the player animates it.
+  const startFrameUrl = (await startFrameUrlFor(current.params)) ?? undefined;
   let outputUrl = providerUrl;
-  if (getModel(current.modelId)?.provider === "motion" && current.params.startFrameGenerationId) {
-    outputUrl = (await getGeneration(current.params.startFrameGenerationId))?.outputUrl ?? providerUrl;
-  }
+  if (getModel(current.modelId)?.provider === "motion" && startFrameUrl) outputUrl = startFrameUrl;
+  // An <img> cannot show an MP4, so a real video's thumbnail is its start frame.
+  const isVideoFile = /\.(mp4|webm|mov)(\?|$)/i.test(outputUrl);
   await updateGeneration(id, {
     status: "succeeded",
     outputUrl,
-    thumbnailUrl: outputUrl,
+    thumbnailUrl: isVideoFile ? (startFrameUrl ?? null) : outputUrl,
     error: null,
     completedAt: Date.now(),
   });

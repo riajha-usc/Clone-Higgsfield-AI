@@ -4,6 +4,8 @@
  */
 import Dexie, { liveQuery, type Table } from "dexie";
 import type {
+  Element,
+  ElementType,
   Generation,
   LedgerEntry,
   LedgerReason,
@@ -18,6 +20,7 @@ class CloneDatabase extends Dexie {
   ledger!: Table<LedgerEntry, string>;
   projects!: Table<Project, string>;
   generations!: Table<Generation, string>;
+  elements!: Table<Element, string>;
 
   constructor() {
     super("higgsfield_clone");
@@ -26,6 +29,9 @@ class CloneDatabase extends Dexie {
       ledger: "id, createdAt, reason, generationId",
       projects: "id, createdAt, updatedAt",
       generations: "id, projectId, status, createdAt, parentGenerationId, [projectId+createdAt]",
+    });
+    this.version(2).stores({
+      elements: "id, type, name, createdAt",
     });
   }
 }
@@ -209,6 +215,65 @@ export async function getLineage(id: string, maxAncestors = Infinity): Promise<G
 export async function listChildren(id: string): Promise<Generation[]> {
   const children = await db().generations.where("parentGenerationId").equals(id).toArray();
   return children.sort((a, b) => b.createdAt - a.createdAt);
+}
+
+// ---------------------------------------------------------------- elements
+
+export const ELEMENT_NAME = /^[A-Za-z0-9_-]{1,40}$/;
+
+/** Newest first. */
+export async function listElements(type?: ElementType): Promise<Element[]> {
+  const all = await db().elements.orderBy("createdAt").reverse().toArray();
+  return type ? all.filter((e) => e.type === type) : all;
+}
+
+export async function getElement(id: string): Promise<Element | undefined> {
+  return db().elements.get(id);
+}
+
+export class ElementNameError extends Error {}
+
+export async function createElement(
+  input: Pick<Element, "type" | "name" | "description"> &
+    Partial<Pick<Element, "imageGenerationId" | "imageDataUrl">>,
+): Promise<Element> {
+  const name = input.name.trim();
+  if (!ELEMENT_NAME.test(name)) {
+    throw new ElementNameError("Use letters, numbers, - or _ only, with no spaces, so @name stays one word.");
+  }
+  if (!input.imageGenerationId && !input.imageDataUrl) throw new Error("An element needs an image");
+  const element: Element = {
+    id: crypto.randomUUID(),
+    type: input.type,
+    name,
+    description: input.description.trim(),
+    imageGenerationId: input.imageGenerationId ?? null,
+    imageDataUrl: input.imageGenerationId ? null : (input.imageDataUrl ?? null),
+    createdAt: Date.now(),
+  };
+  const d = db();
+  await d.transaction("rw", d.elements, async () => {
+    const taken = await d.elements.filter((e) => e.name.toLowerCase() === name.toLowerCase()).count();
+    if (taken > 0) throw new ElementNameError(`@${name} is already taken. Pick another name.`);
+    await d.elements.add(element);
+  });
+  return element;
+}
+
+export async function deleteElement(id: string): Promise<void> {
+  await db().elements.delete(id);
+}
+
+/** The element's image: its generation's output, or the uploaded data URL. */
+export async function elementImageUrl(element: Element): Promise<string | null> {
+  if (element.imageGenerationId) return (await getGeneration(element.imageGenerationId))?.outputUrl ?? null;
+  return element.imageDataUrl;
+}
+
+/** Elements with their image URL resolved, newest first. */
+export async function listElementsWithImages(type?: ElementType) {
+  const elements = await listElements(type);
+  return Promise.all(elements.map(async (element) => ({ element, imageUrl: await elementImageUrl(element) })));
 }
 
 // ---------------------------------------------------------------- live queries
