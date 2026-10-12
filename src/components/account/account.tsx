@@ -48,7 +48,7 @@ export function Account() {
       await cancelPlan();
       toast("Plan cancelled. Your credits stay.");
     } catch {
-      toast.error("Could not cancel the plan");
+      toast.error("Couldn't cancel the plan. Try again.");
     }
   }
 
@@ -59,7 +59,7 @@ export function Account() {
       // A full load drops every open query and in-memory job on the old database.
       window.location.assign("/p/demo");
     } catch {
-      toast.error("Could not reset. Close other tabs of this app and try again.");
+      toast.error("Couldn't reset. Close other tabs of this app and try again.");
       setResetting(false);
     }
   }
@@ -124,13 +124,13 @@ export function Account() {
           Ledger
         </h2>
         <div className="overflow-x-auto rounded-card border border-line bg-panel">
-          <table className="w-full min-w-[560px] text-sm">
+          <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line text-left text-text-muted">
-                <th className="px-4 py-3 font-medium">Date</th>
-                <th className="px-4 py-3 font-medium">Reason</th>
-                <th className="px-4 py-3 text-right font-medium">Change</th>
-                <th className="px-4 py-3 text-right font-medium">Balance</th>
+                <th className="px-3 py-3 font-medium sm:px-4">Date</th>
+                <th className="px-3 py-3 font-medium sm:px-4">Reason</th>
+                <th className="px-3 py-3 text-right font-medium sm:px-4">Change</th>
+                <th className="px-3 py-3 text-right font-medium sm:px-4">Balance</th>
               </tr>
             </thead>
             <tbody>
@@ -143,18 +143,18 @@ export function Account() {
               ) : (
                 rows.map(({ entry, balance: after }) => (
                   <tr key={entry.id} className="border-b border-line last:border-0">
-                    <td className="whitespace-nowrap px-4 py-3 text-text-muted">{formatDateTime(entry.createdAt)}</td>
-                    <td className="px-4 py-3">{REASON_LABELS[entry.reason] ?? entry.reason}</td>
+                    <td className="px-3 py-3 text-text-muted sm:whitespace-nowrap sm:px-4">{formatDateTime(entry.createdAt)}</td>
+                    <td className="px-3 py-3 sm:px-4">{REASON_LABELS[entry.reason] ?? entry.reason}</td>
                     <td
                       className={cn(
-                        "whitespace-nowrap px-4 py-3 text-right tabular-nums",
+                        "whitespace-nowrap px-3 py-3 text-right tabular-nums sm:px-4",
                         entry.delta > 0 ? "text-lime" : "text-text",
                       )}
                     >
                       {entry.delta > 0 ? "+" : "−"}
                       {formatCost(Math.abs(entry.delta))}
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">{formatCost(after)}</td>
+                    <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums sm:px-4">{formatCost(after)}</td>
                   </tr>
                 ))
               )}

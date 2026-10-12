@@ -2,6 +2,7 @@
 
 import { ChevronDown, Loader2, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea";
 import { enhancePrompt } from "@/lib/generate";
 import type { GenerationType } from "@/lib/types";
@@ -45,7 +46,10 @@ export function useEnhancement(prompt: string, mode: GenerationType, on: boolean
       return result.enhancedPrompt;
     } catch (cause) {
       if (current.signal.aborted) return null;
-      setError(cause instanceof Error ? cause.message : "Could not enhance the prompt");
+      const message = cause instanceof Error ? cause.message : "Couldn't write the enhanced prompt";
+      setError(`${message}. Press Rewrite to try again, or turn Enhance off.`);
+      // One toast however many rewrites fail while typing.
+      toast.error(`${message}. Press Rewrite to try again, or turn Enhance off.`, { id: "enhance-error" });
       throw cause;
     } finally {
       if (controller.current === current) setPending(false);

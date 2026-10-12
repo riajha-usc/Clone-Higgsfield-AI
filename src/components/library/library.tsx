@@ -1,6 +1,7 @@
 "use client";
 
 import { Heart, Search, X } from "lucide-react";
+import Link from "next/link";
 import { Suspense, useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -14,6 +15,9 @@ import { listGenerations, listProjects } from "@/lib/repo";
 import { useAppStore } from "@/lib/store";
 import type { Generation } from "@/lib/types";
 import { cn } from "@/lib/utils";
+
+const emptyActionClass =
+  "rounded-pill border border-line px-4 py-1.5 text-sm text-text transition-colors hover:bg-panel";
 
 const TYPES = ["all", "image", "video"] as const;
 const STATUSES = ["all", "succeeded", "pending", "failed"] as const;
@@ -141,10 +145,22 @@ export function Library() {
             ))}
           </div>
         ) : visible.length === 0 ? (
-          <div className="flex min-h-60 items-center justify-center rounded-card border border-dashed border-line">
-            <p className="max-w-xs text-center text-sm text-text-muted">
-              {generations.length === 0 ? "Nothing generated yet." : "Nothing matches these filters."}
-            </p>
+          <div className="flex min-h-60 flex-col items-center justify-center gap-3 rounded-card border border-dashed border-line p-6">
+            {generations.length === 0 ? (
+              <>
+                <p className="text-center text-sm text-text-muted">Nothing generated yet.</p>
+                <Link href="/p/demo" className={emptyActionClass}>
+                  Open the Studio
+                </Link>
+              </>
+            ) : (
+              <>
+                <p className="text-center text-sm text-text-muted">Nothing matches these filters.</p>
+                <button type="button" onClick={() => setFilters(NO_FILTERS)} className={emptyActionClass}>
+                  Clear filters
+                </button>
+              </>
+            )}
           </div>
         ) : (
           <div className="flex flex-wrap gap-3">

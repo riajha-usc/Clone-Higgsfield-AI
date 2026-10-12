@@ -87,7 +87,8 @@
   --destructive: #ff5c5c;
   --border: var(--line);
   --input: var(--line);
-  --ring: #3a3a40;
+  /* Focus ring: must read clearly against near-black (WCAG 2.4.7). */
+  --ring: #c9c9d1;
   --chart-1: var(--lime);
   --chart-2: #9a9aa3;
   --chart-3: #6b6b73;
@@ -107,13 +108,19 @@
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border outline-ring;
   }
   body {
     @apply bg-background text-foreground;
   }
   html {
     @apply font-sans;
+  }
+  /* Fallback keyboard focus for anything without its own focus style. Components
+     that set outline-none draw a ring instead, and utilities override this. */
+  :where(a, button, input, textarea, select, summary, [role="button"], [tabindex]):focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
   }
 }
 /* Motion preview camera presets (lib/catalog/presets.json → cssKeyframesName) */

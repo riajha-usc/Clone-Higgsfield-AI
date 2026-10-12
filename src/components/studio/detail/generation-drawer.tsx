@@ -32,6 +32,7 @@ import { aspectRatio, getModel, getPreset, outputSize, PROVIDER_LABELS } from "@
 import { downloadOutput } from "@/lib/download";
 import { formatCost, formatDateTime } from "@/lib/format";
 import { useLive } from "@/lib/hooks/use-live";
+import { useMediaQuery } from "@/lib/hooks/use-media-query";
 import { deleteGeneration, getGeneration, getLineage, listChildren, updateGeneration } from "@/lib/repo";
 import { useAppStore, type BarFill } from "@/lib/store";
 import type { Generation, Project } from "@/lib/types";
@@ -66,6 +67,8 @@ export function GenerationDrawer({ projectId, projects }: { projectId?: string; 
   const loaded = result?.id === id ? result : undefined;
   const generation = loaded?.generation;
   const focusPromptOnClose = useRef(false);
+  // A side panel needs room; on phones the drawer rises from the bottom instead.
+  const narrow = useMediaQuery("(max-width: 767px)");
 
   // A link to a generation in another project opens that project instead.
   useEffect(() => {
@@ -93,8 +96,8 @@ export function GenerationDrawer({ projectId, projects }: { projectId?: string; 
   return (
     <Sheet open={Boolean(id)} onOpenChange={(open) => !open && close()}>
       <SheetContent
-        side="right"
-        className="gap-0 border-line bg-panel p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-[440px]"
+        side={narrow ? "bottom" : "right"}
+        className="gap-0 border-line bg-panel p-0 data-[side=bottom]:h-[92dvh] data-[side=bottom]:rounded-t-2xl data-[side=right]:w-full data-[side=right]:sm:max-w-[440px]"
         onCloseAutoFocus={(e) => {
           if (!focusPromptOnClose.current) return;
           focusPromptOnClose.current = false;
@@ -152,7 +155,11 @@ function Details({
   const { params } = generation;
 
   async function toggleFavourite() {
-    await updateGeneration(generation.id, { favourite: !generation.favourite });
+    try {
+      await updateGeneration(generation.id, { favourite: !generation.favourite });
+    } catch {
+      toast.error("Couldn't update favourites. Try again.");
+    }
   }
 
   async function remove() {
@@ -162,7 +169,7 @@ function Details({
       onDeleted();
       toast("Deleted. Credits already spent are not refunded.");
     } catch {
-      toast.error("Could not delete this generation");
+      toast.error("Couldn't delete this generation. Try again.");
     }
   }
 
@@ -196,10 +203,10 @@ function Details({
 
   return (
     <>
-      <header className="flex h-14 shrink-0 items-center gap-2 border-b border-line px-5 pr-12">
+      <div className="flex h-14 shrink-0 items-center gap-2 border-b border-line px-5 pr-12">
         {isVideo ? <Video className="size-4 text-text-muted" /> : <ImageIcon className="size-4 text-text-muted" />}
         <SheetTitle className="text-sm font-medium">{isVideo ? "Video" : "Image"}</SheetTitle>
-      </header>
+      </div>
 
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
         <Preview generation={generation} />
@@ -262,9 +269,23 @@ function Details({
             Recreate
           </PrimaryAction>
         ) : (
-          <PrimaryAction onClick={turnToVideo} disabled={!done} icon={<Video className="size-4" />}>
-            Turn to video
-          </PrimaryAction>
+          <>
+            <PrimaryAction
+              onClick={turnToVideo}
+              disabled={!done}
+              icon={<Video className="size-4" />}
+              describedBy={done ? undefined : "turn-to-video-why"}
+            >
+              Turn to video
+            </PrimaryAction>
+            {!done && (
+              <p id="turn-to-video-why" className="text-center text-xs text-text-muted">
+                {pending
+                  ? "Available once this image finishes."
+                  : "This image failed, so there is nothing to animate. Recreate it, with another model if needed."}
+              </p>
+            )}
+          </>
         )}
         <div className="flex gap-2">
           {isVideo ? (
@@ -394,7 +415,7 @@ function PromptBlock({ label, text }: { label: string; text: string }) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
-      toast.error("Could not copy to the clipboard");
+      toast.error("Couldn't copy. Select the text and copy it by hand.");
     }
   }
 
@@ -579,11 +600,14 @@ function PrimaryAction({
   onClick,
   disabled,
   icon,
+  describedBy,
   children,
 }: {
   onClick: () => void;
   disabled?: boolean;
   icon: React.ReactNode;
+  /** id of the text explaining why it is disabled. */
+  describedBy?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -591,6 +615,7 @@ function PrimaryAction({
       type="button"
       onClick={onClick}
       disabled={disabled}
+      aria-describedby={describedBy}
       className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-lime text-sm font-semibold text-lime-foreground transition-[filter,opacity] hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lime disabled:cursor-not-allowed disabled:opacity-40"
     >
       {icon}

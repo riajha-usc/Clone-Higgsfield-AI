@@ -3,6 +3,7 @@
  * ledger; the server only proxies the provider.
  */
 import { getModel } from "@/lib/catalog";
+import { formatBalance, formatCost } from "@/lib/format";
 import type { JobState } from "@/lib/providers/types";
 import {
   addLedgerEntry,
@@ -15,6 +16,26 @@ import {
 import { useAppStore } from "@/lib/store";
 import type { Generation, GenerationParams, GenerationType } from "@/lib/types";
 
+const NETWORK = "Couldn't reach the server. Check your connection and try again";
+
+/** A failed /api/generate answer, in words. Server error bodies are for developers. */
+function submitFailure(status: number): string {
+  if (status === 400) return "The server couldn't read this request. Reload the page and try again";
+  if (status === 501) return "This model isn't set up on the server yet. Pick another one";
+  if (status >= 500) return "The generation service couldn't start this job. Try again in a moment";
+  return `The server turned this request down (error ${status}). Try again`;
+}
+
+/** fetch, with network failures turned into a sentence a person can act on. */
+async function fetchOrExplain(input: string, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(input, init);
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") throw error;
+    throw new Error(NETWORK);
+  }
+}
+
 const POLL_INTERVAL_MS = 2_000;
 const MAX_POLL_DURATION_MS = 10 * 60 * 1000;
 const MAX_CONSECUTIVE_POLL_ERRORS = 5;
@@ -26,7 +47,9 @@ export class InsufficientCreditsError extends Error {
     readonly balance: number,
     readonly cost: number,
   ) {
-    super(`This costs ${cost} credits but you have ${balance}`);
+    super(
+      `This costs ${formatCost(cost)} ${cost === 1 ? "credit" : "credits"} and you have ${formatBalance(balance)}. Upgrade or pick a cheaper model.`,
+    );
     this.name = "InsufficientCreditsError";
   }
 }
@@ -68,9 +91,9 @@ function reservePollinationsSlot(): number {
  */
 export async function generate(request: GenerateRequest): Promise<Generation> {
   const model = getModel(request.modelId);
-  if (!model) throw new Error(`Unknown model "${request.modelId}"`);
+  if (!model) throw new Error("That model is no longer available. Pick another one.");
   if (model.type !== request.type) {
-    throw new Error(`${model.displayName} does not make ${request.type}s`);
+    throw new Error(`${model.displayName} can't make ${request.type}s. Pick a ${request.type} model.`);
   }
 
   const cost = model.costPerGeneration;
@@ -84,10 +107,10 @@ export async function generate(request: GenerateRequest): Promise<Generation> {
     ? await getGeneration(params.startFrameGenerationId)
     : undefined;
   if (params.startFrameGenerationId && !startFrame?.outputUrl) {
-    throw new Error("The start frame is missing or not finished");
+    throw new Error("The start frame was deleted or hasn't finished. Choose another one.");
   }
   if (model.type === "video" && model.needsStartFrame && !startFrame) {
-    throw new Error(`${model.displayName} needs a start frame`);
+    throw new Error(`${model.displayName} needs a start frame. Add an image first.`);
   }
   const generation = await createGeneration({
     projectId: request.projectId,
@@ -127,7 +150,7 @@ export async function generate(request: GenerateRequest): Promise<Generation> {
     });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
-      return await fail(generation.id, body.error ?? `Submit failed (${response.status})`);
+      return await fail(generation.id, submitFailure(response.status));
     }
     await updateGeneration(generation.id, {
       status: "running",
@@ -140,7 +163,11 @@ export async function generate(request: GenerateRequest): Promise<Generation> {
     if (state?.status === "failed") return await fail(generation.id, state.reason);
     return await pollUntilDone(generation.id, body.provider, body.providerJobId);
   } catch (error) {
-    return await fail(generation.id, error instanceof Error ? error.message : "Generation failed");
+    // fetch rejects with a TypeError when the network is down; anything else is ours.
+    return await fail(
+      generation.id,
+      error instanceof TypeError ? NETWORK : "Something went wrong while starting this generation",
+    );
   } finally {
     active.delete(generation.id);
   }
@@ -150,21 +177,18 @@ export async function generate(request: GenerateRequest): Promise<Generation> {
  * Picks up generations left unfinished by a reload or a closed tab. Submitted jobs
  * resume polling; anything that never reached the provider is failed and refunded.
  */
-export async function resumePendingGenerations(): Promise<void> {
+export async function resumePendingGenerations(): Promise<Generation[]> {
   const pending = (await listGenerations()).filter(
     (g) => (g.status === "queued" || g.status === "running") && !active.has(g.id),
   );
-  await Promise.all(
+  return Promise.all(
     pending.map(async (g) => {
       active.add(g.id);
       try {
-        if (g.provider && g.providerJobId) {
-          await pollUntilDone(g.id, g.provider, g.providerJobId);
-        } else {
-          await fail(g.id, "Interrupted before it reached the provider");
-        }
-      } catch (error) {
-        await fail(g.id, error instanceof Error ? error.message : "Generation failed");
+        if (g.provider && g.providerJobId) return await pollUntilDone(g.id, g.provider, g.providerJobId);
+        return await fail(g.id, "The page was closed before this generation started");
+      } catch {
+        return await fail(g.id, NETWORK);
       } finally {
         active.delete(g.id);
       }
@@ -185,9 +209,9 @@ async function pollUntilDone(id: string, provider: string, jobId: string): Promi
       if (!response.ok) throw new Error(`Polling failed (${response.status})`);
       state = await response.json();
       consecutiveErrors = 0;
-    } catch (error) {
+    } catch {
       if (++consecutiveErrors >= MAX_CONSECUTIVE_POLL_ERRORS) {
-        return fail(id, error instanceof Error ? error.message : "Lost contact with the provider");
+        return fail(id, "Lost contact with the server while waiting for the result");
       }
       continue;
     }
@@ -195,7 +219,7 @@ async function pollUntilDone(id: string, provider: string, jobId: string): Promi
     if (state.status === "succeeded") return succeed(id, state.outputUrl);
     if (state.status === "failed") return fail(id, state.reason);
   }
-  return fail(id, "Timed out waiting for the provider");
+  return fail(id, "The provider took more than 10 minutes, so it was stopped");
 }
 
 async function succeed(id: string, providerUrl: string): Promise<Generation> {
@@ -238,13 +262,13 @@ export interface Enhancement {
 
 /** Asks the server to expand a prompt into one detailed paragraph. */
 export async function enhancePrompt(prompt: string, type: GenerationType, signal?: AbortSignal): Promise<Enhancement> {
-  const response = await fetch("/api/enhance", {
+  const response = await fetchOrExplain("/api/enhance", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ prompt, type }),
     signal,
   });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.error ?? `Enhance failed (${response.status})`);
+  if (!response.ok) throw new Error("Couldn't write the enhanced prompt");
   return body as Enhancement;
 }

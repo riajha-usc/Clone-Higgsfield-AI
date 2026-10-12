@@ -43,7 +43,7 @@ export function ConfirmUpgrade({ planId, termValue }: { planId: string | undefin
       toast.success(`${credits} credits added`);
       router.push(recent ? `/p/${recent.id}` : "/");
     } catch {
-      toast.error("Could not complete the upgrade");
+      toast.error("Couldn't complete the upgrade. No credits were added. Try again.");
       setBusy(false);
     }
   }

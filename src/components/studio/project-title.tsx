@@ -23,7 +23,7 @@ export function ProjectTitle({ project }: { project: Project }) {
     try {
       await renameProject(project.id, name);
     } catch {
-      toast.error("Could not rename the project");
+      toast.error("Couldn't rename the project. Try again.");
     }
   }
 

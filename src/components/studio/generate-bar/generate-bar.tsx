@@ -161,7 +161,7 @@ export function GenerateBar({ projectId, generations }: { projectId: string; gen
     try {
       enhancedPrompt = await enhancement.resolve();
     } catch {
-      toast.error("Could not enhance the prompt. Try again, or turn Enhance off to send it as written.");
+      // useEnhancement already told the person what went wrong.
       setSubmitting(false);
       return;
     }
@@ -206,7 +206,7 @@ export function GenerateBar({ projectId, generations }: { projectId: string; gen
 
   return (
     <div
-      className="flex flex-wrap items-stretch gap-3 rounded-2xl border border-line bg-panel p-3 lg:flex-nowrap"
+      className="flex flex-wrap items-stretch gap-3 rounded-2xl border border-line bg-panel p-3 transition-colors has-[textarea:focus]:border-text-muted lg:flex-nowrap"
       onKeyDown={(e) => {
         if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
           e.preventDefault();
@@ -270,13 +270,15 @@ export function GenerateBar({ projectId, generations }: { projectId: string; gen
             size="sm"
             pressed={enhanceOn}
             onPressedChange={setEnhanceOn}
-            aria-label="Enhance prompt"
             title="Rewrite your prompt into a detailed paragraph before it is sent. You can read and edit it first."
             className="h-8 rounded-pill border border-line px-3 text-xs data-[state=on]:border-text-muted"
           >
             <Wand2 className="size-3.5" />
             Enhance
-            <span className={enhanceOn ? "font-medium text-text" : "text-text-muted"}>{enhanceOn ? "On" : "Off"}</span>
+            {/* aria-pressed already says on or off; this is for sighted users. */}
+            <span aria-hidden className={enhanceOn ? "font-medium text-text" : "text-text-muted"}>
+              {enhanceOn ? "On" : "Off"}
+            </span>
           </Toggle>
           {continues && (
             <span className={cn(chipClass, "pr-1.5")} data-testid="continues-chip">

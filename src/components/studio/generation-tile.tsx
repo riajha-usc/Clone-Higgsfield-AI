@@ -43,7 +43,11 @@ export function GenerationTile({
   const draggable = Boolean(done) && generation.type === "image";
 
   async function toggleFavourite() {
-    await updateGeneration(generation.id, { favourite: !generation.favourite });
+    try {
+      await updateGeneration(generation.id, { favourite: !generation.favourite });
+    } catch {
+      toast.error("Couldn't update favourites. Try again.");
+    }
   }
 
   async function remove() {
@@ -51,7 +55,7 @@ export function GenerationTile({
       await deleteGeneration(generation.id);
       toast("Deleted. Credits already spent are not refunded.");
     } catch {
-      toast.error("Could not delete this generation");
+      toast.error("Couldn't delete this generation. Try again.");
     }
   }
 
