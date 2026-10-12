@@ -68,7 +68,8 @@ export const falProvider: GenerationProvider = {
     });
     const body = await response.json().catch(() => ({}));
     if (!response.ok || typeof body.request_id !== "string") {
-      return { jobId: input.generationId, state: { status: "failed", reason: failureReason(response.status) } };
+      console.error(`fal: submit failed (${response.status})`, JSON.stringify(body).slice(0, 500));
+      return { jobId: input.generationId, state: { status: "failed", reason: failureReason(response.status, body) } };
     }
     const job: FalJob = {
       id: body.request_id,
@@ -86,7 +87,9 @@ export const falProvider: GenerationProvider = {
     if (!statusResponse.ok) {
       // A transient error keeps the job alive; the client gives up after repeated failures.
       if (statusResponse.status >= 500 || statusResponse.status === 429) throw new Error(`fal status ${statusResponse.status}`);
-      return { status: "failed", reason: failureReason(statusResponse.status) };
+      const detail = await statusResponse.json().catch(() => ({}));
+      console.error(`fal: status failed (${statusResponse.status})`, JSON.stringify(detail).slice(0, 500));
+      return { status: "failed", reason: failureReason(statusResponse.status, detail) };
     }
     const status = (await statusResponse.json()) as { status?: string };
     if (status.status === "IN_QUEUE") return { status: "pending" };
@@ -96,12 +99,19 @@ export const falProvider: GenerationProvider = {
     const body = await result.json().catch(() => ({}));
     const url = body?.video?.url;
     if (result.ok && typeof url === "string") return { status: "succeeded", outputUrl: url };
-    return { status: "failed", reason: failureReason(result.status) };
+    console.error(`fal: result failed (${result.status})`, JSON.stringify(body).slice(0, 500));
+    return { status: "failed", reason: failureReason(result.status, body) };
   },
 };
 
-function failureReason(status: number): string {
-  if (status === 401 || status === 403) return "The server's fal key was refused";
+/** fal's error bodies carry a `detail` string (or a list of validation errors). */
+function failureReason(status: number, body?: unknown): string {
+  const detail = JSON.stringify((body as { detail?: unknown } | undefined)?.detail ?? "").toLowerCase();
+  if (/balance|billing|locked|credit|payment/.test(detail)) {
+    return "The fal.ai account has no balance left. Top it up at fal.ai/dashboard/billing";
+  }
+  if (status === 401) return "The server's fal key was refused";
+  if (status === 403) return "fal.ai refused this request for the server's account";
   if (status === 422 || status === 400) return REJECTED;
   return BUSY;
 }
